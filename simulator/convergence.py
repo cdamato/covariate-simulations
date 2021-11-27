@@ -154,6 +154,7 @@ def modelFitting(betas, num_hazard_params, hazard, mle, kVec, covariate_data):
     # log.info("MVF values: %s", mvf_array)
     intensityList = intensityFit(mvf_array)
     # log.info("Intensity values: %s", intensityList)
+    return omega, mvf_array
 
 
 def calcOmega(h, betas, kVec, covariate_data):
@@ -258,8 +259,16 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
     betas = mle_array[num_hazard_params:]
     # log.info("model parameters =", modelParameters)
     # log.info("betas =", betas)
-
     hazard = np.array([common.hazard_numerical(model, i + 1, modelParameters) for i in range(len(kVec))])
     hazard_array = hazard    # for MVF prediction, don't want to calculate again
-    modelFitting(betas, num_hazard_params, hazard, mle_array, kVec, covariateData)
-    return runtime, converged, mle_array
+    omega, mvf_array = modelFitting(betas, num_hazard_params, hazard, mle_array, kVec, covariateData)
+    return omega, mvf_array, converged, mle_array
+
+
+def FC_Prediction(covariates, complete_dataset, num_covariates, model, betas, omega, hazard_params, num_hazard_params):
+    #uncommment below if you want to use models gen at runtime
+    contents = pd.read_csv(complete_dataset)
+    #contents = pd.read_csv("/Users/brendan/Desktop/Undergraduate Research/FallReseacrh/simulator/ds1.csv")
+    kVec = contents["FC"].array
+    # Fc = MVF(betas, num_hazard_params, omega, hazard_params, kVec, covariates)
+    # print(f"FC IS {Fc}\n")

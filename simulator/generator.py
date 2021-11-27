@@ -79,30 +79,28 @@ def generate_omega(hazard_name):
 
 
 def simulate_dataset(hazard, num_intervals, num_covariates):
-    cov_dataset = np.zeros((num_covariates + 1, num_intervals))
-
-    for covariate in range(num_covariates):
-        for interval in range(num_intervals):
-            cov_dataset[covariate, interval] = scipy.stats.expon.rvs(random.randint(2, 7))
-
-    cov_dataset[0,:] = generate_FC(hazard, cov_dataset[1:,:], num_covariates, num_intervals, \
-        generate_betas(num_covariates), generate_omega(hazard), generate_hazardparams(hazard))
-
-    return cov_dataset;
+	cov_dataset = np.zeros((num_covariates + 1, num_intervals))
+	for covariate in range(num_covariates):
+		for interval in range(num_intervals):
+			cov_dataset[covariate+1, interval] = scipy.stats.expon.rvs(random.randint(2, 7))
+	cov_dataset[0,:] = generate_FC(hazard, cov_dataset[1:,:], num_covariates, num_intervals,generate_betas(num_covariates), generate_omega(hazard), generate_hazardparams(hazard))
+	output_filename = print_dataset(cov_dataset,num_intervals,"Test1", "GM", num_covariates)
+	return output_filename
 
 
 def print_dataset(cov_dataset, num_intervals, base_directory, model, num_covariates):
 	try:
-		os.mkdir(f"{base_directory}/{model}", 0o777)
+		os.mkdir(f"{base_directory}/{model}/{num_covariates}", 0o777)
 	except:
 		pass
 
-	output_filename = f"{base_directory}/{model}/{num_covariates}cov.csv"
+	output_filename = f"{base_directory}{num_covariates}cov.csv"
 
 	with open(output_filename, 'w') as myfile:
 		wr = writer(myfile)
 		wr.writerow(['T', 'FC'] + [f'x{i+1}' for i in range(num_covariates)])
 		wr.writerows(zip(range(1, num_intervals + 1), *cov_dataset))
+	return output_filename
 		
 def batch_simulator(base_directory, num_intervals, max_num_covariates, num_datasets):
 	try:
@@ -123,4 +121,4 @@ def batch_simulator(base_directory, num_intervals, max_num_covariates, num_datas
 				cov_dataset = simulate_dataset(model, num_intervals, num_covariates)
 				print_dataset(cov_dataset, num_intervals, sim_dir, model, num_covariates)
 
-batch_simulator("dir", 10, 10, 10)
+
