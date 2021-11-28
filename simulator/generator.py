@@ -6,7 +6,7 @@ import sys, os
 import random, math
 import pandas as pd
 import numpy as np
-import common
+from simulator import common
 
 def poisson_variate(lam): # algorithm to find pseudorandom variate of the Poisson distribution
 	x = 0
@@ -84,8 +84,7 @@ def simulate_dataset(hazard, num_intervals, num_covariates):
 		for interval in range(num_intervals):
 			cov_dataset[covariate+1, interval] = scipy.stats.expon.rvs(random.randint(2, 7))
 	cov_dataset[0,:] = generate_FC(hazard, cov_dataset[1:,:], num_covariates, num_intervals,generate_betas(num_covariates), generate_omega(hazard), generate_hazardparams(hazard))
-	output_filename = print_dataset(cov_dataset,num_intervals,"Test1", "GM", num_covariates)
-	return output_filename
+	return cov_dataset
 
 
 def print_dataset(cov_dataset, num_intervals, base_directory, model, num_covariates):

@@ -17,6 +17,7 @@ import math
 import pandas as pd
 import csv
 import common
+import generator
 
 
 parameters = {"IFRGSB": [0.1, 0.1], "GM": [0.01], "NB2": [0.01], "DW2": [0.994], "DW3": [0.1, 0.5], "S": [0.1, 0.1], "TL": [0.1, 0.1], "IFRSB": [0.1]}
@@ -265,10 +266,25 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
     return omega, mvf_array, converged, mle_array
 
 
-def FC_Prediction(covariates, complete_dataset, num_covariates, model, betas, omega, hazard_params, num_hazard_params):
-    #uncommment below if you want to use models gen at runtime
-    contents = pd.read_csv(complete_dataset)
-    #contents = pd.read_csv("/Users/brendan/Desktop/Undergraduate Research/FallReseacrh/simulator/ds1.csv")
-    kVec = contents["FC"].array
-    # Fc = MVF(betas, num_hazard_params, omega, hazard_params, kVec, covariates)
-    # print(f"FC IS {Fc}\n")
+def MeanValueFunction(covariates, omega, hazard_params, num_covariates, betas, kVec):
+    full_length = len(kVec)
+    kVecNew = kVec[:full_length-3]
+    mvf = 0
+    accumulator = 0
+    truncated_length = len(kVecNew)
+    truncated_sum = sum(kVecNew)
+    PSSE = 0
+    for i in range(truncated_length, full_length):
+        mvf = float(omega*generator.p("GM", hazard_params,
+                    i, covariates, num_covariates, betas))
+        accumulator += mvf
+        PSSE += (mvf-kVec[i-1])**2
+        # print(f"[+] Predicted FC at interval {i+1} is: {mvf}")
+        # print(f"[+] Actual FC at interval {i+1} is: {kVec[i-1]}\n")
+        #omega*(1-(1-hazard_param)**(math.exp(x1[i]*betaVec[i])*math.exp(x2[i]*betaVec[i]))
+    # print(
+    #     f"\n-----------Predictive cumulative FC is {truncated_sum+accumulator}---------------")
+    # print(
+    #     f"-------------Actual cumulative FC is {sum(kVec)}------------------------------")
+    # print(
+    #     f"-------------PSSE: {PSSE}-------------------------------------------------\n")

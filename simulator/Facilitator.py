@@ -8,13 +8,15 @@ import generator
 parameters = {"IFRGSB": [0.1, 0.1], "GM": [0.01], "NB2": [0.01], "DW2": [
     0.994], "DW3": [0.1, 0.5], "S": [0.1, 0.1], "TL": [0.1, 0.1], "IFRSB": [0.1]}
 hazard_names = ["IFRGSB", "GM", "NB2", "DW2", "DW3", "S", "TL", "IFRSB"]
-num_covariates = 5
-num_simulated_sets = 1000
+
 
 def MaximumLiklihoodEstimator():
-
-    dataset_name = generator.simulate_dataset("GM",10,3)
     model = "GM"
+    base_directory = "TEST"
+    num_intervals = 25
+    Covariates = 3
+    dataset_name = generator.print_dataset(generator.simulate_dataset(
+        model, num_intervals, Covariates), num_intervals, base_directory, model, Covariates)
     metricNames = csv.reader(open(dataset_name, newline=''))
     metricNames = next(metricNames)[2:]
     data = pd.read_csv(dataset_name)
@@ -33,8 +35,8 @@ def MaximumLiklihoodEstimator():
         print(
             f"Data:{dataset_name} | Model:{model} | {numCovariates} Covariate(s)\n")
         print(
-            f" [+] Omega: {Omega}\n [+] Hazard Parameters: {Hazard_params}\n [+] MLE Array: {betas}\n [+] MVF Array: {mvf_array}\n [+] Actual FC array: {kVec}\n [+] Actual FC sum: {sum(kVec)}\n [+] Predicted FC Sum: {mvf_array[-1]}\n\n")
-        convergence.FC_Prediction(covariates, dataset_name, numCovariates, model, betas, Omega, Hazard_params, num_hazard_params)
+            f" [+] Omega: {Omega}\n [+] Hazard Parameters: {Hazard_params}\n [+] MLE Array: {betas}\n ")
+        convergence.MeanValueFunction(covariates, Omega, Hazard_params, numCovariates, betas, kVec)
     else:
         print(f'-----[!] WARNING {dataset_name} | Model:{model} | {numCovariates} Covariates DID NOT CONVERGE!-----\n\n')
         

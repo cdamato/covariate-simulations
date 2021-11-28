@@ -19,7 +19,7 @@ import warnings
 
 import sys
 import os
-import covariate_generator as covariates
+from simulator import generator
 
 
 num_hazards = 8
@@ -27,8 +27,10 @@ num_intervals = 25
 num_covariates = 0
 
 # Definition of the training network
+
+
 class ANN(nn.Module):
-    def __init__(self, input_dim = num_intervals, output_dim = num_hazards):
+    def __init__(self, input_dim=num_intervals, output_dim=num_hazards):
         super(ANN, self).__init__()
         self.fc1 = nn.Linear(input_dim, input_dim)
         self.fc2 = nn.Linear(input_dim, input_dim)
@@ -50,22 +52,27 @@ class ANN(nn.Module):
 # Input will be a matrix of size <num_intervals> by <num_covariates>, containing a generated dataset.
 # Results will be a matrix 1 by <num_hazards>, containing ideal evaluated outputs.
 # NOTE: This function can be generalized by passing in an evaluation function to build results
+
+
 def gen_training_detaset():
-	# Pick a model 
-    model_id = random.randint(0, num_hazards - 1)
+    model_id = random.randint(0, num_hazards - 1)  # Pick a model
     models = ["GM", "NB2", "DW2", "DW3", "S", "TL", "IFRSB", "IFRGSB"]
-    results = np.array([[0]] * num_hazards).transpose()
-    results[0, model_id] = 1 # Fill in results vector
-    training_input = torch.from_numpy(covariates.simulate_dataset(models[model_id], num_intervals, num_covariates))
-    training_output = torch.from_numpy(results)
+    results = np.array([[0]] * num_hazards).transpose() #Intended output vector, which the loss function is measured  against
+    results[0, model_id] = 1  # Fill in results vector
+    training_input = torch.from_numpy(generator.simulate_dataset(models[model_id], num_intervals, num_covariates))
+    training_output = torch.from_numpy(Facilitator.results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
-    train_loader = torch.utils.data.DataLoader(train, batch_size=1, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(
+        train, batch_size=1, shuffle=True)
     return train_loader
 
 # Normalizes a tensor so that the sum of all elements is 100%
+
+
 def normalize_tensor_to_100(tensor):
     max_out = max(1e-64, sum(tensor[0].tolist()))
     return [i * (1 / max_out) for i in output][0]
+
 
 model = ANN()
 summary(model)
@@ -100,7 +107,7 @@ for epoch in range(epochs):
         total += len(target)
         correct += (predicted == target).sum()
         print(normalize_tensor_to_100(output))
-        
+
         loss = loss_fn(output, target)
         loss.backward()
         optimizer.step()
