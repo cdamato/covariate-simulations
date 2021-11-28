@@ -16,14 +16,15 @@ import pandas as pd
 import numpy as np
 import random
 import warnings
+import matplotlib.pyplot as plt
 
 import sys
 import os
-from simulator import generator
+from simulator import generator, Facilitator
 
 
 num_hazards = 8
-num_intervals = 25
+num_intervals = 15
 num_covariates = 0
 
 # Definition of the training network
@@ -49,7 +50,7 @@ class ANN(nn.Module):
         return nn.Sigmoid()(x)
 
 # Generates a training dataset, split into inputs and results.
-# Input will be a matrix of size <num_intervals> by <num_covariates>, containing a generated dataset.
+# Input will be a matrix of size <num_covariates> by <num_intervals>, containing a generated dataset.
 # Results will be a matrix 1 by <num_hazards>, containing ideal evaluated outputs.
 # NOTE: This function can be generalized by passing in an evaluation function to build results
 
@@ -59,8 +60,11 @@ def gen_training_detaset():
     models = ["GM", "NB2", "DW2", "DW3", "S", "TL", "IFRSB", "IFRGSB"]
     results = np.array([[0]] * num_hazards).transpose() #Intended output vector, which the loss function is measured  against
     results[0, model_id] = 1  # Fill in results vector
-    training_input = torch.from_numpy(generator.simulate_dataset(models[model_id], num_intervals, num_covariates))
-    training_output = torch.from_numpy(Facilitator.results)
+    training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
+    for index, model in enumerate(models):
+        results[0,index] = Facilitator.MaximumLiklihoodEstimator(model, training_input)
+    training_input = torch.from_numpy(training_input)
+    training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
     train_loader = torch.utils.data.DataLoader(
         train, batch_size=1, shuffle=True)

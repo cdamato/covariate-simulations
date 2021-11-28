@@ -77,7 +77,7 @@ def generate_omega(hazard_name):
 	}
 	return omega_ranges[hazard_name]
 
-
+# Input will be a matrix of size <num_covariates> by <num_intervals>, containing a generated dataset.
 def simulate_dataset(hazard, num_intervals, num_covariates):
 	cov_dataset = np.zeros((num_covariates + 1, num_intervals))
 	for covariate in range(num_covariates):
