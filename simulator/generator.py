@@ -6,7 +6,7 @@ import sys, os
 import random, math
 import pandas as pd
 import numpy as np
-import common
+from simulator import common
 
 def poisson_variate(lam): # algorithm to find pseudorandom variate of the Poisson distribution
 	x = 0

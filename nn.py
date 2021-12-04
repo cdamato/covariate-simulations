@@ -23,7 +23,7 @@ import os
 from simulator import generator, Facilitator
 
 
-num_hazards = 8
+num_hazards = 7
 num_intervals = 15
 num_covariates = 0
 
@@ -57,12 +57,14 @@ class ANN(nn.Module):
 
 def gen_training_detaset():
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
-    models = ["GM", "NB2", "DW2", "DW3", "S", "TL", "IFRSB", "IFRGSB"]
+    models = ["GM", "NB2", "DW2", "DW3", "S", "IFRSB", "IFRGSB"]
     results = np.array([[0]] * num_hazards).transpose() #Intended output vector, which the loss function is measured  against
     results[0, model_id] = 1  # Fill in results vector
     training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
     for index, model in enumerate(models):
+        print(f"[!] ------------ Model is {model} --------------")
         results[0,index] = Facilitator.MaximumLiklihoodEstimator(model, training_input)
+        print(f"[!] ------------ END of {model} ----------------\n")
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
@@ -82,7 +84,7 @@ model = ANN()
 summary(model)
 loss_fn = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-6)
-epochs = 65535
+epochs = 10
 
 # I am REALLY not sure what these are for
 epoch_list = []
