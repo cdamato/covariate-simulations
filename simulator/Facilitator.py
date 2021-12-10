@@ -4,10 +4,12 @@ import pandas as pd
 import numpy as np
 import time
 from simulator import generator, convergence
+import matplotlib
+import matplotlib.pyplot as plt
 
 parameters = {"IFRGSB": [0.1, 0.1], "GM": [0.01], "NB2": [0.01], "DW2": [
-    0.994], "DW3": [0.1, 0.5], "S": [0.1, 0.1], "TL": [0.1, 0.1], "IFRSB": [0.1]}
-hazard_names = ["IFRGSB", "GM", "NB2", "DW2", "DW3", "S", "TL", "IFRSB"]
+    0.994], "DW3": [0.1, 0.5], "S": [0.1, 0.1],  "IFRSB": [0.1]}
+hazard_names = ["IFRGSB", "GM", "NB2", "DW2", "DW3", "S", "IFRSB"]
 
 
 def MaximumLiklihoodEstimator(model, input_dataset):
@@ -27,13 +29,14 @@ def MaximumLiklihoodEstimator(model, input_dataset):
     # num_hazard_params = len(parameters[model])
     covariates = input_dataset[1:]
     kVec = input_dataset[0,:]
+    y_axis = list(range(0,50))
     num_hazard_params = len(parameters[model])
     Omega, mvf_array, converged, mle_array = convergence.runEstimation(
         model, num_hazard_params, kVec, covariates)
     Hazard_params = mle_array[0:num_hazard_params]
     betas = mle_array[num_hazard_params:]
     if converged:
-        PSSE = convergence.PSSE(covariates, Omega, Hazard_params, len(covariates), betas, kVec)
+        PSSE = convergence.PSSE(covariates, Omega, Hazard_params, len(covariates), betas, kVec, model)
         return PSSE
     else:
         return 2**32-1

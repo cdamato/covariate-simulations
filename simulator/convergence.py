@@ -265,7 +265,7 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
     return omega, mvf_array, converged, mle_array
 
 
-def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec):
+def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec, model):
     full_length = len(kVec)
     kVecNew = kVec[:full_length-3]
     mvf = 0
@@ -274,16 +274,16 @@ def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec):
     truncated_sum = sum(kVecNew)
     PSSE = 0
     for i in range(truncated_length, full_length):
-        mvf = float(omega*generator.p("GM", hazard_params,
+        mvf = float(omega*generator.p(model, hazard_params,
                     i, covariates, num_covariates, betas))
         accumulator += mvf
         PSSE += (mvf-kVec[i-1])**2
-        print(f"[+] Predicted FC at interval {i+1} is: {mvf}")
-        print(f"[+] Actual FC at interval {i+1} is: {kVec[i-1]}\n")
-    print(
-        f"\n-----------Predictive cumulative FC is {truncated_sum+accumulator}---------------")
-    print(
-        f"-------------Actual cumulative FC is {sum(kVec)}------------------------------")
-    print(
-        f"-------------PSSE: {PSSE}-------------------------------------------------\n")
+#        print(f"[+] Predicted FC at interval {i+1} is: {mvf}")
+#        print(f"[+] Actual FC at interval {i+1} is: {kVec[i-1]}\n")
+#    print(
+#        f"\n-----------Predictive cumulative FC is {truncated_sum+accumulator}---------------")
+#    print(
+#        f"-------------Actual cumulative FC is {sum(kVec)}------------------------------")
+#    print(
+#        f"-------------PSSE: {PSSE}-------------------------------------------------\n")
     return PSSE

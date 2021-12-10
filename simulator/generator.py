@@ -114,4 +114,4 @@ def batch_simulator(base_directory, num_intervals, max_num_covariates, num_datas
 				print_dataset(cov_dataset, num_intervals, sim_dir, model, num_covariates)
 
 
-batch_simulator("datasets", 25, 5, 25)
+#batch_simulator("datasets", 25, 5, 25)
