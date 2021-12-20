@@ -22,10 +22,9 @@ import sys
 import os
 from simulator import generator, Facilitator
 
-
-num_hazards = 7
-num_intervals = 50
-num_covariates = 0
+num_hazards = 3
+num_intervals = 25
+num_covariates = 2
 
 # Definition of the training network
 
@@ -33,10 +32,9 @@ num_covariates = 0
 class ANN(nn.Module):
     def __init__(self, input_dim=num_intervals, output_dim=num_hazards):
         super(ANN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, input_dim*2)
-        self.fc2 = nn.Linear(input_dim*2, input_dim*4)
-        self.fc3 = nn.Linear(input_dim*4, input_dim*2)
-        self.fc4 = nn.Linear(input_dim*2, input_dim)
+        self.fc1 = nn.Linear(input_dim, input_dim+5)
+        self.fc2 = nn.Linear(input_dim+5, input_dim+5)
+        self.fc3 = nn.Linear(input_dim+5, input_dim)
         self.output_layer = nn.Linear(input_dim, num_hazards)
         self.dropout = nn.Dropout(0.15)
 
@@ -45,7 +43,6 @@ class ANN(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.dropout(x)
         x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
         x = self.output_layer(x)
         return nn.Sigmoid()(x)
 
@@ -57,15 +54,18 @@ class ANN(nn.Module):
 
 def gen_training_detaset(epoch):
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
-    models = ["GM", "NB2", "DW2", "DW3", "S", "IFRSB", "IFRGSB"]
+    models = ["GM", "DW3", "DW2", "NB2", "S", "IFRSB", "IFRGSB"]
     results = np.array([[0.0]] * num_hazards).transpose() #Intended output vector, which the loss function is measured  against
     training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
-    plt.title(models[model_id])
-    plt.plot(training_input[0], color="red")
-    print(f"At epoch {epoch}, For {models[model_id]}, kvec is {training_input[0]}\n")
-    plt.savefig(f"DatasetPlots/{models[model_id]}Epoch{epoch}.png")
+    # print(f"\nModel is {models[model_id]}")
+    # plt.title(models[model_id])
+    # plt.plot(training_input[0], color="red")
+    # print(f"At epoch {epoch}, For {models[model_id]}, kvec is {training_input[0]}\n")
+    # plt.savefig(f"DatasetPlots/{models[model_id]}Epoch{epoch}.png")
+    # plt.close()
     for index in range(num_hazards):
         results[0, index] = Facilitator.MaximumLiklihoodEstimator(models[index], training_input)
+        #print(f"Result vector for {models[index]} is {results[0, index]}")
 
     print("input vector is", results)
     training_input = torch.from_numpy(training_input)
