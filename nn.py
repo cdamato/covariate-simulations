@@ -24,7 +24,7 @@ from simulator import generator, Facilitator
 
 num_hazards = 3
 num_intervals = 25
-num_covariates = 2
+num_covariates = 3
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
@@ -81,8 +81,8 @@ class ANN(nn.Module):
 def gen_training_detaset(epoch):
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
     models = ["GM", "DW3", "DW2", "NB2", "S", "IFRSB", "IFRGSB"]
-    results = np.array([[0.0]] * num_hazards).transpose() #Intended output vector, which the loss function is measured  against
-    results = np.zeros(shape=(num_covariates+1,num_hazards)) #Intended output vector
+    results = np.array([[0.0]] * num_hazards).transpose() #ONLY WORKS FOR 1 COV \\Intended output vector, which the loss function is measured  against\\ 
+    results = np.zeros(shape=(num_covariates+1,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
     training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
     # print(f"\nModel is {models[model_id]}")
     # plt.title(models[model_id])
@@ -102,8 +102,6 @@ def gen_training_detaset(epoch):
     return train_loader
 
 # Normalizes a tensor so that the sum of all elements is 100%
-
-
 def normalize_tensor_to_100(tensor):
     max_out = max(1e-64, sum(tensor[0].tolist()))
     return [i * (1 / max_out) for i in output][0]
@@ -205,7 +203,7 @@ for e in range(epochs):
         output = model(data)
         # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
         sorted_output = sortHazard(output)
-        print(f"!! {cov_count} covariates!!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
+        print(f"!! {cov_count} covariates !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
         cov_count += 1
         #print("Validation output vector is", output)
         # Find the Loss
