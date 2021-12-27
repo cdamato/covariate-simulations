@@ -1,11 +1,5 @@
-
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
-from sklearn.model_selection import train_test_split
-import glob
 import numpy as np
 import torch
-import torchinfo
 from torchinfo import summary
 import torch.utils.data
 import torch.optim as optim
@@ -15,12 +9,11 @@ from torch.autograd import Variable
 import pandas as pd
 import numpy as np
 import random
-import warnings
 import matplotlib.pyplot as plt
-
 import sys
 import os
 from simulator import generator, Facilitator
+import itertools
 
 num_hazards = 3
 num_intervals = 25
@@ -54,6 +47,27 @@ this was just my initial thought process'''
 #     return updated_hazard
 
 
+def covCombinations(num_covariates):
+    index = 0
+    start = [None]*(2**num_covariates)
+    end = [None]*(2**num_covariates)
+    for i in itertools.product([0, 1], repeat=num_covariates):
+        counter = num_covariates
+        start_index = 0
+        end_index = 0
+        for bit in i:
+            if bit == 1:
+                while end_index == 0:
+                    end_index = counter
+                start_index = counter
+                counter -= 1
+            else:
+                counter -= 1
+        start[index] = start_index
+        end[index] = end_index
+        index += 1
+    return start, end
+
 # Definition of the training network
 class ANN(nn.Module):
     def __init__(self, input_dim=num_intervals, output_dim=num_hazards):
@@ -82,18 +96,18 @@ def gen_training_detaset(epoch):
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
     models = ["GM", "DW3", "DW2", "NB2", "S", "IFRSB", "IFRGSB"]
     results = np.array([[0.0]] * num_hazards).transpose() #ONLY WORKS FOR 1 COV \\Intended output vector, which the loss function is measured  against\\ 
-    results = np.zeros(shape=(num_covariates+1,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
+    results = np.zeros(shape=(2**num_covariates,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
     training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
+    start, end  = covCombinations(num_covariates)
     # print(f"\nModel is {models[model_id]}")
     # plt.title(models[model_id])
     # plt.plot(training_input[0], color="red")
     # print(f"At epoch {epoch}, For {models[model_id]}, kvec is {training_input[0]}\n")
     # plt.savefig(f"DatasetPlots/{models[model_id]}Epoch{epoch}.png")
     # plt.close()
-    for covariates in range (num_covariates+1):
+    for iteration in range (2**num_covariates):
      for index in range(num_hazards):
-            results[covariates, index] = Facilitator.MaximumLiklihoodEstimator(models[index], training_input[:covariates+1])
-            #print(f"Result vector for {models[index]} is {results[0, index]}")
+             results[iteration, index] = Facilitator.MaximumLiklihoodEstimator(models[index], training_input[:iteration+1], iteration, start, end)
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
@@ -191,6 +205,7 @@ for e in range(epochs):
     valid_loss = 0.0
     model.eval()  # Optional when not using Model Specific layer
     cov_count = 0
+    start, end = covCombinations(num_covariates)
     for data, target in validloader:
         sorted_results = sortHazard(target)
         data = Variable(data).float()
@@ -203,7 +218,7 @@ for e in range(epochs):
         output = model(data)
         # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
         sorted_output = sortHazard(output)
-        print(f"!! {cov_count} covariates !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
+        print(f"!! covariate vector: {start[cov_count]} - {end[cov_count]} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
         cov_count += 1
         #print("Validation output vector is", output)
         # Find the Loss
