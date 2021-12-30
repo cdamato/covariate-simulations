@@ -27,11 +27,16 @@ def MaximumLiklihoodEstimator(model, input_dataset, iteration ,start ,end):
     #     [data[name].values for name in metricNames])
     # numCovariates = len(covariates)
     # num_hazard_params = len(parameters[model])
-    '''IF (iteration % numcovariates) = 1, then drop the covariates bewteen start and end'''
+    '''IF (iteration % numcovariates) = 2, then drop the covariates bewteen start and end'''
     if iteration != 0:
         test_beg = start[iteration]
         test_end = end[iteration]
         covariates = input_dataset[test_beg:(test_end)+1, :]
+        if iteration == 5:
+            covariates = np.zeros(shape=(2, 25))
+            covariates[0,:] = input_dataset[test_beg, :]
+            covariates[1,:] = input_dataset[(test_end), :]
+            
     else:
         covariates = input_dataset[1:]
     kVec = input_dataset[0,:]

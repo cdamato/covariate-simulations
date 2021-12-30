@@ -17,7 +17,7 @@ import itertools
 
 num_hazards = 3
 num_intervals = 25
-num_covariates = 3
+num_covariates = 1
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
@@ -98,6 +98,7 @@ def gen_training_detaset(epoch):
     results = np.array([[0.0]] * num_hazards).transpose() #ONLY WORKS FOR 1 COV \\Intended output vector, which the loss function is measured  against\\ 
     results = np.zeros(shape=(2**num_covariates,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
     training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
+    training_input.resize(2**num_covariates, num_intervals, refcheck=False)
     start, end  = covCombinations(num_covariates)
     # print(f"\nModel is {models[model_id]}")
     # plt.title(models[model_id])
@@ -126,7 +127,7 @@ summary(model)
 #loss_fn = nn.L1Loss()
 loss_fn = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-6)
-epochs = 100
+epochs = 5
 
 # I am REALLY not sure what these are for
 epoch_list = []
@@ -134,6 +135,9 @@ train_loss_list = []
 val_loss_list = []
 train_acc_list = []
 val_acc_list = []
+DW2_accumulator = 0
+DW3_accumulator = 0
+GM_accumulator = 0
 
  # prepare model for training
 # for epoch in range(epochs):
@@ -218,6 +222,15 @@ for e in range(epochs):
         output = model(data)
         # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
         sorted_output = sortHazard(output)
+        output_accumulator = [item[0] for item in sorted_output]
+        for count, item in enumerate(sorted_results,0):
+            if output_accumulator[0] == item[0]:
+                GM_accumulator +=1
+            if output_accumulator[1] == item[0]:
+                DW3_accumulator += 1
+            if output_accumulator[2] == item[0]:
+                DW2_accumulator += 1
+        
         print(f"!! covariate vector: {start[cov_count]} - {end[cov_count]} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
         cov_count += 1
         #print("Validation output vector is", output)
@@ -235,14 +248,22 @@ for e in range(epochs):
         # Saving State Dict
         torch.save(model.state_dict(), 'saved_model.pth')
 
-fig = plt.figure(figsize=(12, 6))
-ax = fig.add_subplot(121)
-ax2 = fig.add_subplot(122)
-ax.set_title('Training Loss vs Epoch')
-ax.plot(loss_array, color="red")
-#ax.savefig(f"TrainingLossvsEpoch.png")    #Can be consolidated by using a function, maybe called graphResults(loss_array, val_array).
-ax2.set_title('Validation Loss vs Epoch')
-ax2.plot(val_array, color="red")
-#ax2.savefig(f"ValidationLossvsEpoch.png")
-plt.savefig(f"ValandTrain.png")
-plt.show()
+# fig = plt.figure(figsize=(12, 6))
+# ax = fig.add_subplot(121)
+# ax2 = fig.add_subplot(122)
+# ax.set_title('Training Loss vs Epoch')
+# ax.plot(loss_array, color="red")
+# #ax.savefig(f"TrainingLossvsEpoch.png")    #Can be consolidated by using a function, maybe called graphResults(loss_array, val_array).
+# ax2.set_title('Validation Loss vs Epoch')
+# ax2.plot(val_array, color="red")
+# #ax2.savefig(f"ValidationLossvsEpoch.png")
+# plt.savefig(f"ValandTrain.png")
+# plt.show()
+fig, axs = plt.subplots(2, 2)
+axs[0,0].set_title('GM')
+axs[0,0].hist(GM_accumulator, edgecolor='black')
+axs[1,0].set_title('DW2')
+axs[1,0].hist(DW2_accumulator, edgecolor='black')
+axs[0,1].set_title('DW3')
+axs[0,1].hist(DW3_accumulator, edgecolor= 'black')
+fig.tight_layout()
