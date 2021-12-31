@@ -17,23 +17,17 @@ import itertools
 
 num_hazards = 3
 num_intervals = 25
-num_covariates = 4
+num_covariates = 2
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
 Also is utilized to map output of NN to the corresponding hazard function.
 '''
     values = np.array(values.data.numpy()).transpose()  
-    hazards = {
-        'GM': values.item(0),
-        'DW3': values.item(1),
-        'DW2': values.item(2),
-        # 'NB2': 48,
-        # 'S': 41,
-        # 'IFRSB' : 20,
-        # 'IFRSGB' : 10,
-    }
-    return sorted(hazards.items(), key=lambda x:x[1]) #sorts the output of the dictionary in ascending order by values
+    hazard_mapping = {}
+    for index, model in enumerate(values):
+        hazard_mapping[common.models[index]] = values.item(index)
+    return sorted(hazard_mapping.items(), key=lambda x:x[1]) #sorts the output of the dictionary in ascending order by values
 
 
 def covariates_subset(dataset, combo_index):
@@ -125,9 +119,10 @@ train_loss_list = []
 val_loss_list = []
 train_acc_list = []
 val_acc_list = []
-DW2_accumulator = 0
-DW3_accumulator = 0
-GM_accumulator = 0
+
+accumulators = {}
+for index, m in enumerate(common.models[:num_hazards]):
+    accumulators[m] = []
 
  # prepare model for training
 # for epoch in range(epochs):
@@ -212,15 +207,12 @@ for e in range(epochs):
         # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
         sorted_output = sortHazard(output)
         output_accumulator = [item[0] for item in sorted_output]
-        for count, item in enumerate(sorted_results,0):
-            if output_accumulator[0] == item[0]:
-                GM_accumulator +=1
-            if output_accumulator[1] == item[0]:
-                DW3_accumulator += 1
-            if output_accumulator[2] == item[0]:
-                DW2_accumulator += 1
+        for count in range(len(sorted_results)):
+            model_name = sorted_results[count][0]
+            if output_accumulator[count] == model_name:
+                accumulators[model_name].append(count)
         
-        print(f"!! covariate vector: {start[cov_count]} - {end[cov_count]} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
+        print(f"!! covariate vector: {bin(cov_count)} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
         cov_count += 1
         #print("Validation output vector is", output)
         # Find the Loss
@@ -247,12 +239,15 @@ for e in range(epochs):
 # ax2.plot(val_array, color="red")
 # #ax2.savefig(f"ValidationLossvsEpoch.png")
 # plt.savefig(f"ValandTrain.png")
-# plt.show()
+
 fig, axs = plt.subplots(2, 2)
+
 axs[0,0].set_title('GM')
-axs[0,0].hist(GM_accumulator, edgecolor='black')
+axs[0,0].hist(accumulators["GM"], edgecolor='black')
 axs[1,0].set_title('DW2')
-axs[1,0].hist(DW2_accumulator, edgecolor='black')
+axs[1,0].hist(accumulators["NB2"], edgecolor='black')
 axs[0,1].set_title('DW3')
-axs[0,1].hist(DW3_accumulator, edgecolor= 'black')
+axs[0,1].hist(accumulators["DW2"], edgecolor= 'black')
 fig.tight_layout()
+plt.show()
+fig.show()
