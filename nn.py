@@ -12,12 +12,12 @@ import random
 import matplotlib.pyplot as plt
 import sys
 import os
-from simulator import generator, Facilitator
+from simulator import generator, Facilitator, common
 import itertools
 
 num_hazards = 3
 num_intervals = 25
-num_covariates = 1
+num_covariates = 4
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
@@ -35,39 +35,27 @@ Also is utilized to map output of NN to the corresponding hazard function.
     }
     return sorted(hazards.items(), key=lambda x:x[1]) #sorts the output of the dictionary in ascending order by values
 
-# def sortoutput(output):
-'''Dont worry about this for now, 
-the functionality of this is taken care of within the sortHazard function, 
-this was just my initial thought process'''
-#     psse_array = [None] * num_hazards
-#     array = np.array(output.data.numpy())
-#     for num in range(0, num_hazards):          
-#        psse_array[num] = array.item(num)
-#     updated_hazard = sortHazard(psse_array)
-#     return updated_hazard
 
-
-def covCombinations(num_covariates):
-    index = 0
-    start = [None]*(2**num_covariates)
-    end = [None]*(2**num_covariates)
-    for i in itertools.product([0, 1], repeat=num_covariates):
-        counter = num_covariates
-        start_index = 0
-        end_index = 0
-        for bit in i:
-            if bit == 1:
-                while end_index == 0:
-                    end_index = counter
-                start_index = counter
-                counter -= 1
-            else:
-                counter -= 1
-        start[index] = start_index
-        end[index] = end_index
-        index += 1
-    return start, end
-
+def covariates_subset(dataset, combo_index):
+	# Given a combination number, determine which covarites are active.
+	# This uses binary arithmetic to find all true bits
+	# Counting from 0 to 2^n, where n is the number of covariates, will give all combination indices
+    active = []
+    counter = 0
+    index = combo_index
+    while (index != 0):
+        if (index & 1 == 1): 
+            active.append(counter)
+        index >>= 1
+        counter += 1
+    results = np.zeros(shape=(num_covariates + 1, num_intervals))
+    results[0] = dataset[0] # copy failure count
+    for index, value in enumerate(active):
+        results[index + 1] = dataset[value + 1]
+    return results
+	
+	
+	
 # Definition of the training network
 class ANN(nn.Module):
     def __init__(self, input_dim=num_intervals, output_dim=num_hazards):
@@ -91,24 +79,26 @@ class ANN(nn.Module):
 # Results will be a matrix 1 by <num_hazards>, containing ideal evaluated outputs.
 # NOTE: This function can be generalized by passing in an evaluation function to build results
 
-
 def gen_training_detaset(epoch):
+    
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
-    models = ["GM", "DW3", "DW2", "NB2", "S", "IFRSB", "IFRGSB"]
-    results = np.array([[0.0]] * num_hazards).transpose() #ONLY WORKS FOR 1 COV \\Intended output vector, which the loss function is measured  against\\ 
     results = np.zeros(shape=(2**num_covariates,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
-    training_input = generator.simulate_dataset(models[model_id], num_intervals, num_covariates)
+    training_input = generator.simulate_dataset(common.models[model_id], num_intervals, num_covariates)
+    
+    for combination in range(2**num_covariates):
+        subset = covariates_subset(training_input, combination)
+        for model_index, model in enumerate(common.models[0:num_hazards]):
+            results[combination, model_index] = Facilitator.MaximumLiklihoodEstimator(model, subset)
+    
     training_input.resize(2**num_covariates, num_intervals, refcheck=False)
-    start, end  = covCombinations(num_covariates)
+
     # print(f"\nModel is {models[model_id]}")
     # plt.title(models[model_id])
     # plt.plot(training_input[0], color="red")
     # print(f"At epoch {epoch}, For {models[model_id]}, kvec is {training_input[0]}\n")
     # plt.savefig(f"DatasetPlots/{models[model_id]}Epoch{epoch}.png")
     # plt.close()
-    for iteration in range (2**num_covariates):
-     for index in range(num_hazards):
-             results[iteration, index] = Facilitator.MaximumLiklihoodEstimator(models[index], training_input[:iteration+1], iteration, start, end)
+
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
@@ -209,7 +199,6 @@ for e in range(epochs):
     valid_loss = 0.0
     model.eval()  # Optional when not using Model Specific layer
     cov_count = 0
-    start, end = covCombinations(num_covariates)
     for data, target in validloader:
         sorted_results = sortHazard(target)
         data = Variable(data).float()

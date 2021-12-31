@@ -12,7 +12,7 @@ parameters = {"IFRGSB": [0.1, 0.1], "GM": [0.01], "NB2": [0.01], "DW2": [
 hazard_names = ["IFRGSB", "GM", "NB2", "DW2", "DW3", "S", "IFRSB"]
 
 
-def MaximumLiklihoodEstimator(model, input_dataset, iteration ,start ,end):
+def MaximumLiklihoodEstimator(model, input_dataset):
     # model = "GM"
     # base_directory = "TEST"
     # num_intervals = 25
@@ -28,17 +28,8 @@ def MaximumLiklihoodEstimator(model, input_dataset, iteration ,start ,end):
     # numCovariates = len(covariates)
     # num_hazard_params = len(parameters[model])
     '''IF (iteration % numcovariates) = 2, then drop the covariates bewteen start and end'''
-    if iteration != 0:
-        test_beg = start[iteration]
-        test_end = end[iteration]
-        covariates = input_dataset[test_beg:(test_end)+1, :]
-        if iteration == 5:
-            covariates = np.zeros(shape=(2, 25))
-            covariates[0,:] = input_dataset[test_beg, :]
-            covariates[1,:] = input_dataset[(test_end), :]
-            
-    else:
-        covariates = input_dataset[1:]
+  
+    covariates = input_dataset[1:]
     kVec = input_dataset[0,:]
     num_hazard_params = len(parameters[model])
     Omega, mvf_array, converged, mle_array = convergence.runEstimation(
