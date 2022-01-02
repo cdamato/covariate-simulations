@@ -21,9 +21,11 @@ num_covariates = 2
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
-Also is utilized to map output of NN to the corresponding hazard function.
-'''
-    values = np.array(values.data.numpy()).transpose()  
+Also is utilized to map output of NN to the corresponding hazard function.''' 
+    if torch.cuda.is_available():
+        values = np.array(values.data.cpu().numpy()).transpose()
+    else:
+        values = np.array(values.data.numpy()).transpose()  
     hazard_mapping = {}
     for index, model in enumerate(values):
         hazard_mapping[common.models[index]] = values.item(index)
@@ -48,7 +50,14 @@ def covariates_subset(dataset, combo_index):
         results[index + 1] = dataset[value + 1]
     return results
 	
-	
+def datasetPlotter(model, FC, epoch, validation):
+    plt.title(model)
+    plt.plot(FC, color="red")
+    if validation == True:
+     plt.savefig(f"DatasetPlots/VAL-{model}Epoch{epoch}.png")
+    else:
+     plt.savefig(f"DatasetPlots/{model}Epoch{epoch}.png")
+    plt.close()
 	
 # Definition of the training network
 class ANN(nn.Module):
@@ -66,14 +75,17 @@ class ANN(nn.Module):
         x = self.dropout(x)
         x = F.relu(self.fc3(x))
         x = self.output_layer(x)
-        return nn.Sigmoid()(x)
+        # print(x)
+        # print(torch.relu(x))
+        # print(torch.clamp(x, min= 0, max =255))
+        return x
 
 # Generates a training dataset, split into inputs and results.
 # Input will be a matrix of size <num_covariates> by <num_intervals>, containing a generated dataset.
 # Results will be a matrix 1 by <num_hazards>, containing ideal evaluated outputs.
 # NOTE: This function can be generalized by passing in an evaluation function to build results
 
-def gen_training_detaset(epoch):
+def gen_training_detaset(epoch, validation):
     
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
     results = np.zeros(shape=(2**num_covariates,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
@@ -85,19 +97,13 @@ def gen_training_detaset(epoch):
             results[combination, model_index] = Facilitator.MaximumLiklihoodEstimator(model, subset)
     
     training_input.resize(2**num_covariates, num_intervals, refcheck=False)
-
-    # print(f"\nModel is {models[model_id]}")
-    # plt.title(models[model_id])
-    # plt.plot(training_input[0], color="red")
-    # print(f"At epoch {epoch}, For {models[model_id]}, kvec is {training_input[0]}\n")
-    # plt.savefig(f"DatasetPlots/{models[model_id]}Epoch{epoch}.png")
-    # plt.close()
+    #datasetPlotter(common.models[model_id], training_input[0], epoch, validation)
 
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
     train_loader = torch.utils.data.DataLoader(
-        train, batch_size=1, shuffle=True)
+        train, batch_size=1, shuffle=False)
     return train_loader
 
 # Normalizes a tensor so that the sum of all elements is 100%
@@ -108,10 +114,12 @@ def normalize_tensor_to_100(tensor):
 
 model = ANN()
 summary(model)
+if torch.cuda.is_available():
+    model.cuda()
 #loss_fn = nn.L1Loss()
 loss_fn = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-6)
-epochs = 5
+epochs = 30
 
 # I am REALLY not sure what these are for
 epoch_list = []
@@ -164,8 +172,8 @@ loss_array = [None] * epochs
 val_array = [None] * epochs 
 for e in range(epochs):
     train_loss = 0.0
-    trainloader = gen_training_detaset(e)
-    validloader = gen_training_detaset(e)
+    trainloader = gen_training_detaset(e , False)
+    validloader = gen_training_detaset(e, True)
     for data, target in trainloader:
         #sorted_results = sortoutput(target)
         data = Variable(data).float()
@@ -183,7 +191,7 @@ for e in range(epochs):
         #print("Training Output vector is", output)
         # Find the Loss
         loss = loss_fn(output, target)
-        loss_array[e] = loss.item()
+        loss_array[e] = loss.item()/1000
         # Calculate gradients
         loss.backward()
         # Update Weights
@@ -217,7 +225,7 @@ for e in range(epochs):
         #print("Validation output vector is", output)
         # Find the Loss
         loss = loss_fn(output, target)
-        val_array[e] = loss.item()
+        val_array[e] = loss.item()/1000
         # Calculate Loss
         valid_loss += loss.item()
     print(f'----Epoch {e+1} \t\t Training Loss: {train_loss / len(trainloader)} \t\t Validation Loss: {valid_loss / len(validloader)}------\n')
@@ -229,24 +237,24 @@ for e in range(epochs):
         # Saving State Dict
         torch.save(model.state_dict(), 'saved_model.pth')
 
-# fig = plt.figure(figsize=(12, 6))
-# ax = fig.add_subplot(121)
-# ax2 = fig.add_subplot(122)
-# ax.set_title('Training Loss vs Epoch')
-# ax.plot(loss_array, color="red")
-# #ax.savefig(f"TrainingLossvsEpoch.png")    #Can be consolidated by using a function, maybe called graphResults(loss_array, val_array).
-# ax2.set_title('Validation Loss vs Epoch')
-# ax2.plot(val_array, color="red")
-# #ax2.savefig(f"ValidationLossvsEpoch.png")
-# plt.savefig(f"ValandTrain.png")
+fig = plt.figure(figsize=(12, 6))
+ax = fig.add_subplot(121)
+ax2 = fig.add_subplot(122)
+ax.set_title('Training Loss vs Epoch')
+ax.plot(loss_array, color="red")
+#ax.savefig(f"TrainingLossvsEpoch.png")    #Can be consolidated by using a function, maybe called graphResults(loss_array, val_array).
+ax2.set_title('Validation Loss vs Epoch')
+ax2.plot(val_array, color="red")
+#ax2.savefig(f"ValidationLossvsEpoch.png")
+plt.savefig(f"ValandTrain.png")
 
 fig, axs = plt.subplots(2, 2)
 
 axs[0,0].set_title('GM')
 axs[0,0].hist(accumulators["GM"], edgecolor='black')
-axs[1,0].set_title('DW2')
+axs[1,0].set_title('NB2')
 axs[1,0].hist(accumulators["NB2"], edgecolor='black')
-axs[0,1].set_title('DW3')
+axs[0,1].set_title('DW2')
 axs[0,1].hist(accumulators["DW2"], edgecolor= 'black')
 fig.tight_layout()
 plt.show()

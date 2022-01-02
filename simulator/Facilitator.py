@@ -40,7 +40,7 @@ def MaximumLiklihoodEstimator(model, input_dataset):
         PSSE = convergence.PSSE(covariates, Omega, Hazard_params, len(covariates), betas, kVec, model)
         return PSSE
     else:
-        return 2**32-1
+        return 2**8-1
 
     # if converged:
     #     print(
