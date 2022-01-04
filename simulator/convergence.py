@@ -286,4 +286,7 @@ def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec, model):
 #        f"-------------Actual cumulative FC is {sum(kVec)}------------------------------")
 #    print(
 #        f"-------------PSSE: {PSSE}-------------------------------------------------\n")
-    return PSSE
+    if PSSE > 255:
+        return 255
+    else:
+        return PSSE

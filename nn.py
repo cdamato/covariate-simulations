@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats.stats import gmean
 import torch
 from torchinfo import summary
 import torch.utils.data
@@ -63,17 +64,19 @@ def datasetPlotter(model, FC, epoch, validation):
 class ANN(nn.Module):
     def __init__(self, input_dim=num_intervals, output_dim=num_hazards):
         super(ANN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, input_dim+5)
-        self.fc2 = nn.Linear(input_dim+5, input_dim+5)
-        self.fc3 = nn.Linear(input_dim+5, input_dim)
+        self.fc1 = nn.Linear(input_dim, input_dim*2)
+        self.fc2 = nn.Linear(input_dim*2, input_dim*4)
+        self.fc3 = nn.Linear(input_dim*4, input_dim*2)
+        self.fc4 = nn.Linear(input_dim*2, input_dim)
         self.output_layer = nn.Linear(input_dim, num_hazards)
         self.dropout = nn.Dropout(0.15)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = torch.relu(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x))
         x = self.dropout(x)
-        x = F.relu(self.fc3(x))
+        x = torch.relu(self.fc3(x))
+        x = torch.relu(self.fc4(x))
         x = self.output_layer(x)
         # print(x)
         # print(torch.relu(x))
@@ -97,7 +100,7 @@ def gen_training_detaset(epoch, validation):
             results[combination, model_index] = Facilitator.MaximumLiklihoodEstimator(model, subset)
     
     training_input.resize(2**num_covariates, num_intervals, refcheck=False)
-    #datasetPlotter(common.models[model_id], training_input[0], epoch, validation)
+    datasetPlotter(common.models[model_id], training_input[0], epoch, validation)
 
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(results)
@@ -118,8 +121,8 @@ if torch.cuda.is_available():
     model.cuda()
 #loss_fn = nn.L1Loss()
 loss_fn = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-6)
-epochs = 30
+optimizer = optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-6)
+epochs = 10
 
 # I am REALLY not sure what these are for
 epoch_list = []
@@ -236,6 +239,7 @@ for e in range(epochs):
 
         # Saving State Dict
         torch.save(model.state_dict(), 'saved_model.pth')
+    
 
 fig = plt.figure(figsize=(12, 6))
 ax = fig.add_subplot(121)
@@ -246,16 +250,22 @@ ax.plot(loss_array, color="red")
 ax2.set_title('Validation Loss vs Epoch')
 ax2.plot(val_array, color="red")
 #ax2.savefig(f"ValidationLossvsEpoch.png")
+total_chances = epochs * 2**num_covariates
 plt.savefig(f"ValandTrain.png")
-
-fig, axs = plt.subplots(2, 2)
-
-axs[0,0].set_title('GM')
-axs[0,0].hist(accumulators["GM"], edgecolor='black')
-axs[1,0].set_title('NB2')
-axs[1,0].hist(accumulators["NB2"], edgecolor='black')
-axs[0,1].set_title('DW2')
-axs[0,1].hist(accumulators["DW2"], edgecolor= 'black')
-fig.tight_layout()
-plt.show()
-fig.show()
+plt.close()
+plt.title('GM - Amount and Locations of Accurate Prediction')
+plt.hist(accumulators["GM"], edgecolor='black')
+plt.plot()
+plt.savefig("GM - Amount and Locations of Accurate Prediction")
+plt.close()
+plt.title('NB2 - Amount and Locations of Accurate Prediction')
+plt.hist(accumulators["NB2"], edgecolor='black')
+plt.plot()
+plt.savefig("NB2 - Amount and Locations of Accurate Prediction")
+plt.close()
+plt.title('DW2 - Amount and Locations of Accurate Prediction')
+plt.hist(accumulators["DW2"], edgecolor= 'black')
+plt.plot()
+plt.savefig("DW2 - Amount and Locations of Accurate Prediction")
+plt.close()
+print(f"GM accuracy: {len(accumulators['GM'])/total_chances}\nDW2 accuracy: {len(accumulators['DW2'])/total_chances}\nNB2 accuracy: {len(accumulators['NB2'])/total_chances}")
