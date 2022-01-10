@@ -16,9 +16,9 @@ import os
 from simulator import generator, Facilitator, common
 import itertools
 
-num_hazards = 3
+num_hazards = 5
 num_intervals = 25
-num_covariates = 2
+num_covariates = 1
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
@@ -66,17 +66,25 @@ class ANN(nn.Module):
         super(ANN, self).__init__()
         self.fc1 = nn.Linear(input_dim, input_dim*2)
         self.fc2 = nn.Linear(input_dim*2, input_dim*4)
-        self.fc3 = nn.Linear(input_dim*4, input_dim*2)
-        self.fc4 = nn.Linear(input_dim*2, input_dim)
+        self.fc3 = nn.Linear(input_dim*4, input_dim*5)
+        self.fc4 = nn.Linear(input_dim*5, input_dim*6)
+        self.fc5 = nn.Linear(input_dim*6, input_dim*5)
+        self.fc6 = nn.Linear(input_dim*5, input_dim*4)
+        self.fc7 = nn.Linear(input_dim*4, input_dim*3)
+        self.fc8 = nn.Linear(input_dim*3, input_dim)
         self.output_layer = nn.Linear(input_dim, num_hazards)
         self.dropout = nn.Dropout(0.15)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
-        x = torch.sigmoid(self.fc2(x))
-        x = self.dropout(x)
-        x = torch.relu(self.fc3(x))
+        x = torch.relu(self.fc2(x))
+        x = torch.sigmoid(self.fc3(x))
         x = torch.relu(self.fc4(x))
+        x = self.dropout(x)
+        x = torch.relu(self.fc5(x))
+        x = torch.relu(self.fc6(x))
+        x = torch.relu(self.fc7(x))
+        x = torch.relu(self.fc8(x))
         x = self.output_layer(x)
         # print(x)
         # print(torch.relu(x))
@@ -119,10 +127,10 @@ model = ANN()
 summary(model)
 if torch.cuda.is_available():
     model.cuda()
-#loss_fn = nn.L1Loss()
-loss_fn = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-6)
-epochs = 10
+loss_fn = nn.L1Loss()
+#loss_fn = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.015, weight_decay=1e-6)
+epochs = 30
 
 # I am REALLY not sure what these are for
 epoch_list = []
@@ -171,8 +179,8 @@ for index, m in enumerate(common.models[:num_hazards]):
 #     epoch_list.append(epoch + 1)
 #model.train()
 min_valid_loss = np.inf
-loss_array = [None] * epochs
-val_array = [None] * epochs 
+loss_array = [None] * int(epochs/25)
+val_array = [None] * int(epochs/25) 
 for e in range(epochs):
     train_loss = 0.0
     trainloader = gen_training_detaset(e , False)
@@ -194,7 +202,8 @@ for e in range(epochs):
         #print("Training Output vector is", output)
         # Find the Loss
         loss = loss_fn(output, target)
-        loss_array[e] = loss.item()/1000
+        if e % 25 == 0:
+            loss_array[int(e/25)] = loss.item()
         # Calculate gradients
         loss.backward()
         # Update Weights
@@ -228,7 +237,8 @@ for e in range(epochs):
         #print("Validation output vector is", output)
         # Find the Loss
         loss = loss_fn(output, target)
-        val_array[e] = loss.item()/1000
+        if e % 25 == 0:
+            val_array[int(e/25)] = loss.item()
         # Calculate Loss
         valid_loss += loss.item()
     print(f'----Epoch {e+1} \t\t Training Loss: {train_loss / len(trainloader)} \t\t Validation Loss: {valid_loss / len(validloader)}------\n')
@@ -268,4 +278,14 @@ plt.hist(accumulators["DW2"], edgecolor= 'black')
 plt.plot()
 plt.savefig("DW2 - Amount and Locations of Accurate Prediction")
 plt.close()
-print(f"GM accuracy: {len(accumulators['GM'])/total_chances}\nDW2 accuracy: {len(accumulators['DW2'])/total_chances}\nNB2 accuracy: {len(accumulators['NB2'])/total_chances}")
+plt.title('DW3 - Amount and Locations of Accurate Prediction')
+plt.hist(accumulators["DW3"], edgecolor='black')
+plt.plot()
+plt.savefig("DW3 - Amount and Locations of Accurate Prediction")
+plt.close()
+plt.title('S - Amount and Locations of Accurate Prediction')
+plt.hist(accumulators["S"], edgecolor='black')
+plt.plot()
+plt.savefig("S - Amount and Locations of Accurate Prediction")
+plt.close()
+print(f"GM accuracy: {len(accumulators['GM'])/total_chances}\nDW2 accuracy: {len(accumulators['DW2'])/total_chances}\nNB2 accuracy: {len(accumulators['NB2'])/total_chances}\nDW3 accuracy: {len(accumulators['DW3'])/total_chances}\nS accuracy: {len(accumulators['S'])/total_chances}")
