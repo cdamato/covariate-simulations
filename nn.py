@@ -4,7 +4,6 @@ import torch
 from torchinfo import summary
 import torch.utils.data
 import torch.optim as optim
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import pandas as pd
@@ -15,10 +14,6 @@ import sys
 import os
 from simulator import generator, Facilitator, common
 import itertools
-
-num_hazards = 5
-num_intervals = 25
-num_covariates = 1
 
 def sortHazard(values): 
     '''Uses a dictionary to map results vector psse to the corresponding hazard function.
@@ -33,7 +28,7 @@ Also is utilized to map output of NN to the corresponding hazard function.'''
     return sorted(hazard_mapping.items(), key=lambda x:x[1]) #sorts the output of the dictionary in ascending order by values
 
 
-def covariates_subset(dataset, combo_index):
+def covariates_subset(dataset, num_covariates, combo_index):
 	# Given a combination number, determine which covarites are active.
 	# This uses binary arithmetic to find all true bits
 	# Counting from 0 to 2^n, where n is the number of covariates, will give all combination indices
@@ -45,7 +40,7 @@ def covariates_subset(dataset, combo_index):
             active.append(counter)
         index >>= 1
         counter += 1
-    results = np.zeros(shape=(num_covariates + 1, num_intervals))
+    results = np.zeros(shape=(num_covariates + 1, len(dataset[0])))
     results[0] = dataset[0] # copy failure count
     for index, value in enumerate(active):
         results[index + 1] = dataset[value + 1]
@@ -61,19 +56,19 @@ def datasetPlotter(model, FC, epoch, validation):
     plt.close()
 	
 # Definition of the training network
-class ANN(nn.Module):
-    def __init__(self, input_dim=num_intervals, output_dim=num_hazards):
+class ANN(torch.nn.Module):
+    def __init__(self, input_dim, output_dim):
         super(ANN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, input_dim*2)
-        self.fc2 = nn.Linear(input_dim*2, input_dim*4)
-        self.fc3 = nn.Linear(input_dim*4, input_dim*5)
-        self.fc4 = nn.Linear(input_dim*5, input_dim*6)
-        self.fc5 = nn.Linear(input_dim*6, input_dim*5)
-        self.fc6 = nn.Linear(input_dim*5, input_dim*4)
-        self.fc7 = nn.Linear(input_dim*4, input_dim*3)
-        self.fc8 = nn.Linear(input_dim*3, input_dim)
-        self.output_layer = nn.Linear(input_dim, num_hazards)
-        self.dropout = nn.Dropout(0.15)
+        self.fc1 = torch.nn.Linear(input_dim, input_dim*2)
+        self.fc2 = torch.nn.Linear(input_dim*2, input_dim*4)
+        self.fc3 = torch.nn.Linear(input_dim*4, input_dim*5)
+        self.fc4 = torch.nn.Linear(input_dim*5, input_dim*6)
+        self.fc5 = torch.nn.Linear(input_dim*6, input_dim*5)
+        self.fc6 = torch.nn.Linear(input_dim*5, input_dim*4)
+        self.fc7 = torch.nn.Linear(input_dim*4, input_dim*3)
+        self.fc8 = torch.nn.Linear(input_dim*3, input_dim)
+        self.output_layer = torch.nn.Linear(input_dim, output_dim)
+        self.dropout = torch.nn.Dropout(0.15)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -96,14 +91,14 @@ class ANN(nn.Module):
 # Results will be a matrix 1 by <num_hazards>, containing ideal evaluated outputs.
 # NOTE: This function can be generalized by passing in an evaluation function to build results
 
-def gen_training_detaset(epoch, validation):
+def gen_training_detaset(epoch, num_hazards, num_covariates, num_intervals, validation):
     
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
-    results = np.zeros(shape=(2**num_covariates,num_hazards)) #WORKS FOR ALL 0-n cov , but not all combinations 
+    results = np.zeros(shape=(2**num_covariates,num_hazards))
     training_input = generator.simulate_dataset(common.models[model_id], num_intervals, num_covariates)
     
     for combination in range(2**num_covariates):
-        subset = covariates_subset(training_input, combination)
+        subset = covariates_subset(training_input, num_covariates, combination)
         for model_index, model in enumerate(common.models[0:num_hazards]):
             results[combination, model_index] = Facilitator.MaximumLiklihoodEstimator(model, subset)
     
@@ -113,179 +108,127 @@ def gen_training_detaset(epoch, validation):
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
-    train_loader = torch.utils.data.DataLoader(
-        train, batch_size=1, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train, batch_size=1, shuffle=False)
     return train_loader
 
-# Normalizes a tensor so that the sum of all elements is 100%
-def normalize_tensor_to_100(tensor):
-    max_out = max(1e-64, sum(tensor[0].tolist()))
-    return [i * (1 / max_out) for i in output][0]
+def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weight_decay, output_directory):
+    nn = ANN(num_intervals, num_hazards)
+    summary(nn)
+    if torch.cuda.is_available():
+        nn.cuda() 
+    loss_fn = torch.nn.L1Loss()
+    #loss_fn = nn.MSELoss()
+    optimizer = optim.Adam(nn.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    epochs = 3
+
+    # I am REALLY not sure what these are for
+    epoch_list = []
+    train_loss_list = []
+    val_loss_list = []
+    train_acc_list = []
+    val_acc_list = []
+
+    accumulators = {}
+    for index, m in enumerate(common.models[:num_hazards]):
+        accumulators[m] = []
+    min_valid_loss = np.inf
+    loss_array = [None] * int(epochs/25)
+    val_array = [None] * int(epochs/25) 
+    for e in range(epochs):
+        train_loss = 0.0
+        trainloader = gen_training_detaset(e , num_hazards, num_covariates, num_intervals, False)
+        validloader = gen_training_detaset(e, num_hazards, num_covariates, num_intervals,True)
+        for data, target in trainloader:
+            #sorted_results = sortoutput(target)
+            data = Variable(data).float()
+            target = Variable(target).type(torch.FloatTensor)
+            # Transfer Data to GPU if available
+            if torch.cuda.is_available():
+                data, target = data.cuda(), target.cuda()
+
+            # Clear the gradients
+            optimizer.zero_grad()
+            # Forward Pass
+            output = nn(data)
+            # Find the Loss
+            loss = loss_fn(output, target)
+            if e % 25 == 0:
+                loss_array.append(loss.item())
+            # Calculate gradients
+            loss.backward()
+            # Update Weights
+            optimizer.step()
+            # Calculate Loss
+            train_loss += loss.item()
+
+        valid_loss = 0.0
+        nn.eval()  # Optional when not using Model Specific layer
+        cov_count = 0
+        for data, target in validloader:
+            sorted_results = sortHazard(target)
+            data = Variable(data).float()
+            target = Variable(target).type(torch.FloatTensor)
+            # Transfer Data to GPU if available
+            if torch.cuda.is_available():
+                data, target = data.cuda(), target.cuda()
+
+            # Forward Pass
+            output = nn(data)
+            # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
+            sorted_output = sortHazard(output)
+            output_accumulator = [item[0] for item in sorted_output]
+            for count in range(len(sorted_results)):
+                model_name = sorted_results[count][0]
+                if output_accumulator[count] == model_name:
+                    accumulators[model_name].append(count)
+            
+            print(f"!! covariate vector: {bin(cov_count)} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
+            cov_count += 1
+            # Find the Loss
+            loss = loss_fn(output, target)
+            if e % 25 == 0:
+                val_array.append(loss.item())
+            # Calculate Loss
+            valid_loss += loss.item()
+        print(f'----Epoch {e+1} \t\t Training Loss: {train_loss / len(trainloader)} \t\t Validation Loss: {valid_loss / len(validloader)}------\n')
+
+        if min_valid_loss > valid_loss:
+            print(f'------Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model------\n')
+            min_valid_loss = valid_loss
+
+            # Saving State Dict
+            torch.save(nn.state_dict(), 'saved_model.pth')
 
 
-model = ANN()
-summary(model)
-if torch.cuda.is_available():
-    model.cuda()
-loss_fn = nn.L1Loss()
-#loss_fn = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.015, weight_decay=1e-6)
-epochs = 30
 
-# I am REALLY not sure what these are for
-epoch_list = []
-train_loss_list = []
-val_loss_list = []
-train_acc_list = []
-val_acc_list = []
-
-accumulators = {}
-for index, m in enumerate(common.models[:num_hazards]):
-    accumulators[m] = []
-
- # prepare model for training
-# for epoch in range(epochs):
-#     # are all these necessary?
-#     trainloss = 0.0
-#     valloss = 0.0
-#     correct = 0
-#     total = 0
-#     train_loader = gen_training_detaset(epoch)
-#     #model.train()
-#     # there must be SOME way to clean this up...
-#     for data, target in train_loader:
-#         data = Variable(data).float()
-#         target = Variable(target).type(torch.FloatTensor)
-#         optimizer.zero_grad()
-#         output = model(data)
-#         print("Output vector is", output)
-#         predicted = (torch.round(output.data[0]))
-#         total += len(target)
-#         correct += (predicted == target).sum()
-
-#         loss = loss_fn(output, target)
-#         loss.backward()
-#         optimizer.step()
-#         trainloss += loss.item()*data.size(0)
-
-# 	# What is any of this for either?
-#     trainloss = trainloss/len(train_loader.dataset)
-#     accuracy =  correct / float(total)
-#     train_acc_list.append(accuracy)
-#     train_loss_list.append(trainloss)
-#     print('Epoch: {} \tTraining Loss: {:.4f}\t'.format(
-#         epoch+1,
-#         trainloss))
-#     epoch_list.append(epoch + 1)
-#model.train()
-min_valid_loss = np.inf
-loss_array = [None] * int(epochs/25)
-val_array = [None] * int(epochs/25) 
-for e in range(epochs):
-    train_loss = 0.0
-    trainloader = gen_training_detaset(e , False)
-    validloader = gen_training_detaset(e, True)
-    for data, target in trainloader:
-        #sorted_results = sortoutput(target)
-        data = Variable(data).float()
-        target = Variable(target).type(torch.FloatTensor)
-        # Transfer Data to GPU if available
-        if torch.cuda.is_available():
-            data, target = data.cuda(), target.cuda()
-
-        # Clear the gradients
-        optimizer.zero_grad()
-        # Forward Pass
-        output = model(data)
-        #sorted_output = sortoutput(output) #uses dictionary to sort the models output/ for training
-        #print(f"[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
-        #print("Training Output vector is", output)
-        # Find the Loss
-        loss = loss_fn(output, target)
-        if e % 25 == 0:
-            loss_array[int(e/25)] = loss.item()
-        # Calculate gradients
-        loss.backward()
-        # Update Weights
-        optimizer.step()
-        # Calculate Loss
-        train_loss += loss.item()
-
-    valid_loss = 0.0
-    model.eval()  # Optional when not using Model Specific layer
-    cov_count = 0
-    for data, target in validloader:
-        sorted_results = sortHazard(target)
-        data = Variable(data).float()
-        target = Variable(target).type(torch.FloatTensor)
-        # Transfer Data to GPU if available
-        if torch.cuda.is_available():
-            data, target = data.cuda(), target.cuda()
-
-        # Forward Pass
-        output = model(data)
-        # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
-        sorted_output = sortHazard(output)
-        output_accumulator = [item[0] for item in sorted_output]
-        for count in range(len(sorted_results)):
-            model_name = sorted_results[count][0]
-            if output_accumulator[count] == model_name:
-                accumulators[model_name].append(count)
         
-        print(f"!! covariate vector: {bin(cov_count)} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
-        cov_count += 1
-        #print("Validation output vector is", output)
-        # Find the Loss
-        loss = loss_fn(output, target)
-        if e % 25 == 0:
-            val_array[int(e/25)] = loss.item()
-        # Calculate Loss
-        valid_loss += loss.item()
-    print(f'----Epoch {e+1} \t\t Training Loss: {train_loss / len(trainloader)} \t\t Validation Loss: {valid_loss / len(validloader)}------\n')
+    fig = plt.figure(figsize=(12, 6))
+    ax = fig.add_subplot(121)
+    ax2 = fig.add_subplot(122)
+    ax.set_title('Training Loss vs Epoch')
+    ax.plot(loss_array, color="red")
+    #ax.savefig(f"TrainingLossvsEpoch.png")    #Can be consolidated by using a function, maybe called graphResults(loss_array, val_array).
+    ax2.set_title('Validation Loss vs Epoch')
+    ax2.plot(val_array, color="red")
+    #ax2.savefig(f"ValidationLossvsEpoch.png")
+    total_chances = epochs * 2**num_covariates
+    plt.savefig(f"{output_directory}/ValandTrain.png")
 
-    if min_valid_loss > valid_loss:
-        print(f'------Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model------\n')
-        min_valid_loss = valid_loss
 
-        # Saving State Dict
-        torch.save(model.state_dict(), 'saved_model.pth')
+    plt.close()
+    for model in common.models[:num_hazards]:
+        plt.title(f"{model} - Amount and Locations of Accurate Prediction")
+        plt.hist(accumulators[model], edgecolor='black')
+        plt.plot()
+        plt.savefig(f"{output_directory}/{model} - Amount and Locations of Accurate Prediction")
+        plt.close()
     
+    
+    for model in common.models[:num_hazards]:
+        print(f"{model} accuracy: {len(accumulators[model])/total_chances}\n")
+        
 
-fig = plt.figure(figsize=(12, 6))
-ax = fig.add_subplot(121)
-ax2 = fig.add_subplot(122)
-ax.set_title('Training Loss vs Epoch')
-ax.plot(loss_array, color="red")
-#ax.savefig(f"TrainingLossvsEpoch.png")    #Can be consolidated by using a function, maybe called graphResults(loss_array, val_array).
-ax2.set_title('Validation Loss vs Epoch')
-ax2.plot(val_array, color="red")
-#ax2.savefig(f"ValidationLossvsEpoch.png")
-total_chances = epochs * 2**num_covariates
-plt.savefig(f"ValandTrain.png")
-plt.close()
-plt.title('GM - Amount and Locations of Accurate Prediction')
-plt.hist(accumulators["GM"], edgecolor='black')
-plt.plot()
-plt.savefig("GM - Amount and Locations of Accurate Prediction")
-plt.close()
-plt.title('NB2 - Amount and Locations of Accurate Prediction')
-plt.hist(accumulators["NB2"], edgecolor='black')
-plt.plot()
-plt.savefig("NB2 - Amount and Locations of Accurate Prediction")
-plt.close()
-plt.title('DW2 - Amount and Locations of Accurate Prediction')
-plt.hist(accumulators["DW2"], edgecolor= 'black')
-plt.plot()
-plt.savefig("DW2 - Amount and Locations of Accurate Prediction")
-plt.close()
-plt.title('DW3 - Amount and Locations of Accurate Prediction')
-plt.hist(accumulators["DW3"], edgecolor='black')
-plt.plot()
-plt.savefig("DW3 - Amount and Locations of Accurate Prediction")
-plt.close()
-plt.title('S - Amount and Locations of Accurate Prediction')
-plt.hist(accumulators["S"], edgecolor='black')
-plt.plot()
-plt.savefig("S - Amount and Locations of Accurate Prediction")
-plt.close()
-print(f"GM accuracy: {len(accumulators['GM'])/total_chances}\nDW2 accuracy: {len(accumulators['DW2'])/total_chances}\nNB2 accuracy: {len(accumulators['NB2'])/total_chances}\nDW3 accuracy: {len(accumulators['DW3'])/total_chances}\nS accuracy: {len(accumulators['S'])/total_chances}")
+
+
+
+train_model(7, 1, 25, 0.015, 1e-6,"sim1")
