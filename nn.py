@@ -77,7 +77,7 @@ class ANN(torch.nn.Module):
         x = torch.relu(self.fc4(x))
         x = self.dropout(x)
         x = torch.relu(self.fc5(x))
-        x = torch.relu(self.fc6(x))
+        x = torch.sigmoid(self.fc6(x))
         x = torch.relu(self.fc7(x))
         x = torch.relu(self.fc8(x))
         x = self.output_layer(x)
@@ -96,37 +96,31 @@ def gen_training_detaset(epoch, num_hazards, num_covariates, num_intervals, vali
     model_id = random.randint(0, num_hazards - 1)  # Pick a model
     results = np.zeros(shape=(2**num_covariates,num_hazards))
     training_input = generator.simulate_dataset(common.models[model_id], num_intervals, num_covariates)
-    
-    for combination in range(2**num_covariates):
-        subset = covariates_subset(training_input, num_covariates, combination)
+    subset_list = np.zeros(shape=(2**num_covariates, num_intervals*(num_covariates +1)))
+    for index, combination in enumerate(range(2**num_covariates),0):
+        subset = covariates_subset(training_input, num_covariates, combination) 
+        subset_list[index] = np.resize(subset, (num_covariates+1,num_intervals)).flatten()
         for model_index, model in enumerate(common.models[0:num_hazards]):
             results[combination, model_index] = Facilitator.MaximumLiklihoodEstimator(model, subset)
-    
-    training_input.resize(2**num_covariates, num_intervals, refcheck=False)
+    #print(subset_list)
+    #training_input.resize(2**num_covariates, num_intervals, refcheck=False)
     datasetPlotter(common.models[model_id], training_input[0], epoch, validation)
-
-    training_input = torch.from_numpy(training_input)
+    training_input = torch.from_numpy(subset_list)
     training_output = torch.from_numpy(results)
     train = torch.utils.data.TensorDataset(training_input, training_output)
     train_loader = torch.utils.data.DataLoader(train, batch_size=1, shuffle=False)
     return train_loader
 
 def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weight_decay, output_directory):
-    nn = ANN(num_intervals, num_hazards)
+    nn = ANN(num_intervals*(num_covariates+1), num_hazards)
     summary(nn)
     if torch.cuda.is_available():
         nn.cuda() 
     loss_fn = torch.nn.L1Loss()
     #loss_fn = nn.MSELoss()
     optimizer = optim.Adam(nn.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    epochs = 3
+    epochs = 50
 
-    # I am REALLY not sure what these are for
-    epoch_list = []
-    train_loss_list = []
-    val_loss_list = []
-    train_acc_list = []
-    val_acc_list = []
 
     accumulators = {}
     for index, m in enumerate(common.models[:num_hazards]):
@@ -230,5 +224,5 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
 
 
 
-
-train_model(7, 1, 25, 0.015, 1e-6,"sim1")
+#(num_hazards , num_covariates , num_intervals , learning_rate , weight_decay , output_directory)
+train_model(5, 1, 25, 0.015, 1e-6,"sim1")
