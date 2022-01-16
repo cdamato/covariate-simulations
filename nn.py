@@ -71,10 +71,10 @@ class ANN(torch.nn.Module):
         self.dropout = torch.nn.Dropout(0.15)
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
+        x = torch.sigmoid(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x))
         x = torch.sigmoid(self.fc3(x))
-        x = torch.relu(self.fc4(x))
+        x = torch.sigmoid(self.fc4(x))
         x = self.dropout(x)
         x = torch.relu(self.fc5(x))
         x = torch.sigmoid(self.fc6(x))
@@ -99,7 +99,7 @@ def gen_training_detaset(epoch, num_hazards, num_covariates, num_intervals, vali
     subset_list = np.zeros(shape=(2**num_covariates, num_intervals*(num_covariates +1)))
     for index, combination in enumerate(range(2**num_covariates),0):
         subset = covariates_subset(training_input, num_covariates, combination) 
-        subset_list[index] = np.resize(subset, (num_covariates+1,num_intervals)).flatten()
+        subset_list[index] = (np.resize(subset, (num_covariates+1,num_intervals)).flatten()) /np.amax(subset)
         for model_index, model in enumerate(common.models[0:num_hazards]):
             results[combination, model_index] = Facilitator.MaximumLiklihoodEstimator(model, subset)
     #print(subset_list)
@@ -113,13 +113,13 @@ def gen_training_detaset(epoch, num_hazards, num_covariates, num_intervals, vali
 
 def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weight_decay, output_directory):
     nn = ANN(num_intervals*(num_covariates+1), num_hazards)
-    summary(nn)
+    #summary(nn)
     if torch.cuda.is_available():
         nn.cuda() 
     loss_fn = torch.nn.L1Loss()
     #loss_fn = nn.MSELoss()
     optimizer = optim.Adam(nn.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    epochs = 50
+    epochs = 10
 
 
     accumulators = {}
@@ -130,10 +130,10 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
     val_array = [None] * int(epochs/25) 
     for e in range(epochs):
         train_loss = 0.0
+        cov_count = 0
         trainloader = gen_training_detaset(e , num_hazards, num_covariates, num_intervals, False)
-        validloader = gen_training_detaset(e, num_hazards, num_covariates, num_intervals,True)
         for data, target in trainloader:
-            #sorted_results = sortoutput(target)
+            sorted_results = sortHazard(target)
             data = Variable(data).float()
             target = Variable(target).type(torch.FloatTensor)
             # Transfer Data to GPU if available
@@ -144,6 +144,7 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
             optimizer.zero_grad()
             # Forward Pass
             output = nn(data)
+            sorted_output = sortHazard(output)
             # Find the Loss
             loss = loss_fn(output, target)
             if e % 25 == 0:
@@ -154,44 +155,52 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
             optimizer.step()
             # Calculate Loss
             train_loss += loss.item()
-
-        valid_loss = 0.0
-        nn.eval()  # Optional when not using Model Specific layer
-        cov_count = 0
-        for data, target in validloader:
-            sorted_results = sortHazard(target)
-            data = Variable(data).float()
-            target = Variable(target).type(torch.FloatTensor)
-            # Transfer Data to GPU if available
-            if torch.cuda.is_available():
-                data, target = data.cuda(), target.cuda()
-
-            # Forward Pass
-            output = nn(data)
-            # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
-            sorted_output = sortHazard(output)
-            output_accumulator = [item[0] for item in sorted_output]
-            for count in range(len(sorted_results)):
-                model_name = sorted_results[count][0]
-                if output_accumulator[count] == model_name:
-                    accumulators[model_name].append(count)
-            
             print(f"!! covariate vector: {bin(cov_count)} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
-            cov_count += 1
-            # Find the Loss
-            loss = loss_fn(output, target)
-            if e % 25 == 0:
-                val_array.append(loss.item())
-            # Calculate Loss
-            valid_loss += loss.item()
-        print(f'----Epoch {e+1} \t\t Training Loss: {train_loss / len(trainloader)} \t\t Validation Loss: {valid_loss / len(validloader)}------\n')
+            cov_count+=1
+            print(f'- ---Epoch {e+1} \t\t Training Loss: {loss}\n')
+    print("\n-------------------- VALIDATION LOOP -----------------------\n")
+    valid_loss = 0.0
+    cov_count = 0
+    with torch.no_grad():
+        nn.eval()
+        for i in range(epochs):
+            validloader = gen_training_detaset(
+                i, num_hazards, num_covariates, num_intervals, True)
+            cov_count = 0
+            for data, target in validloader:
+                sorted_results = sortHazard(target)
+                data = Variable(data).float()
+                target = Variable(target).type(torch.FloatTensor)
+                # Transfer Data to GPU if available
+                if torch.cuda.is_available():
+                    data, target = data.cuda(), target.cuda()
 
-        if min_valid_loss > valid_loss:
-            print(f'------Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model------\n')
-            min_valid_loss = valid_loss
+                # Forward Pass
+                output = nn(data)
+                # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
+                sorted_output = sortHazard(output)
+                output_accumulator = [item[0] for item in sorted_output]
+                for count in range(len(sorted_results)):
+                    model_name = sorted_results[count][0]
+                    if output_accumulator[count] == model_name:
+                        accumulators[model_name].append(count)
+                
+                print(f"!! covariate vector: {bin(cov_count)} !!\n[+] Sorted output for results: {sorted_results}\n[+] Sorted output for model prediction {sorted_output}\n")
+                cov_count += 1
+                # Find the Loss
+                loss = loss_fn(output, target)
+                if i % 25 == 0:
+                    val_array.append(loss.item())
+                # Calculate Loss
+                valid_loss += loss.item()
+                print(f'----Epoch {i+1} Validation Loss: {loss}\n')
 
-            # Saving State Dict
-            torch.save(nn.state_dict(), 'saved_model.pth')
+            if min_valid_loss > valid_loss:
+                print(f'------Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model------\n')
+                min_valid_loss = valid_loss
+
+                # Saving State Dict
+                torch.save(nn.state_dict(), 'saved_model.pth')
 
 
 
@@ -225,4 +234,4 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
 
 
 #(num_hazards , num_covariates , num_intervals , learning_rate , weight_decay , output_directory)
-train_model(5, 1, 25, 0.015, 1e-6,"sim1")
+train_model(3, 2, 25, 0.001, 1e-6,"sim1")
