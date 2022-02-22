@@ -1,58 +1,39 @@
-import os
-import ctypes
+from simulator import common
+import os, sys, csv
 import numpy as np
 import math
-import pandas as pd
-import sys
-import csv
-from math import *
-from abc import ABC, abstractmethod, abstractproperty
-from scipy.special import factorial as spfactorial
 import logging as log
-import time   # for testing
-import numpy as np
 import scipy.optimize
 import symengine
-import math
-import pandas as pd
-import csv
-from simulator import generator, common
 
 
 parameters = {"IFRGSB": [0.1, 0.1], "GM": [0.01], "NB2": [0.01], "DW2": [0.994], "DW3": [0.1, 0.5], "S": [0.1, 0.1], "TL": [0.1, 0.1], "IFRSB": [0.1]}
 
 def hazard_symbolic(model, i, args):
     if model == "GM":
-        f = args[0]
-        return f
+        f = args[0] 
     elif model == "DW3":
-        f = 1 - symengine.exp(-args[0] * i**args[1])
-        return f
+        f = 1 - symengine.exp(-args[0] * i**args[1]) 
     elif model == "DW2":
-        f = 1 - args[0]**(i**2 - (i - 1)**2)
-        return f
+        f = 1 - args[0]**(i**2 - (i - 1)**2) 
     elif model == "IFRGSB":
-        f = 1 - args[0] / ((i - 1) * args[1] + 1)
-        return f
+        f = 1 - args[0] / ((i - 1) * args[1] + 1) 
     elif model == "IFRSB":
-        f = 1 - args[0] / i
-        return f
+        f = 1 - args[0] / i 
     elif model == "NB2":
-        f = (i * args[0]**2)/(1 + args[0] * (i - 1))
-        return f
+        f = (i * args[0]**2)/(1 + args[0] * (i - 1)) 
     elif model == "S":
-        f = args[0] * (1 - args[1]**i)
-        return f
+        f = args[0] * (1 - args[1]**i) 
     elif model == "TL":
         try:
             f = (1 - symengine.exp(-1/args[1])) / (1 + symengine.exp(- (i - args[0])/args[1]))
         except OverflowError:
             f = float('inf')
-        return f
+    return f
 
 def RLL(model, x, num_hazard_params, kVec, covariates):
     kvec_sum = np.sum(kVec)
-    fourthTerm = np.sum(np.log(spfactorial(kVec)))
+    fourthTerm = np.sum(np.log(scipy.special.factorial(kVec)))
     n = len(kVec)
     # the vector x contains [b, beta1, beta2, beta3, beta4] so 1: is just the betas
     betas = np.array(x[num_hazard_params:len(x)])
@@ -63,7 +44,7 @@ def RLL(model, x, num_hazard_params, kVec, covariates):
     for i in range(n):
         one_minus_hazard = (1 - common.hazard_numerical(model, i, hazard_params))
         try:
-            glookups[i] = exp(np.dot(betas, covariates[:, i]))
+            glookups[i] = math.exp(np.dot(betas, covariates[:, i]))
         except OverflowError:
             return float('inf')
         # calculate the sum of all gxib from 0 to i, then raise (1 - b) to that sum
@@ -120,13 +101,6 @@ def LLF_sym(model, numSymbols, kVec, covariate_data):
 
 
 def convertSym(x, bh, target):
-    """Converts the symbolic function to a lambda function
-
-    Args:
-
-    Returns:
-
-    """
     return symengine.lambdify(x, bh, backend='lambda')
 
 
@@ -230,7 +204,6 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
 
     # create new lambda function that calls lambda function for all covariates
     # for no covariates, concatenating array a with zero element array
-    optimize_start = time.time()    # record time
     
     # Generate initial estimates
     parameterEstimates = list(parameters[model])
@@ -250,9 +223,6 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
     solution_object = scipy.optimize.minimize(RLL_minimize, x0=initial, args=(model, num_hazard_params,kVec, covariateData,), method='Nelder-Mead')
     mle_array, converged = optimizeSolution(fd, solution_object.x)
     # print(mle_array)
-    optimize_stop = time.time()
-    runtime = optimize_stop - optimize_start
-    # print(runtime)
 
     modelParameters = mle_array[:num_hazard_params]
     # print(modelParameters)
@@ -274,7 +244,7 @@ def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec, model):
     truncated_sum = sum(kVecNew)
     PSSE = 0
     for i in range(truncated_length, full_length):
-        mvf = float(omega*generator.p(model, hazard_params,
+        mvf = float(omega*common.p(model, hazard_params,
                     i, covariates, num_covariates, betas))
         accumulator += mvf
         PSSE += (mvf-kVec[i-1])**2
@@ -290,3 +260,45 @@ def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec, model):
         return 255
     else:
         return PSSE
+
+
+hazard_names = ["IFRGSB", "GM", "NB2", "DW2", "DW3", "S", "IFRSB"]
+
+
+def MaximumLiklihoodEstimator(model, input_dataset):
+    # model = "GM"
+    # base_directory = "TEST"
+    # num_intervals = 25
+    # Covariates = 3
+    # dataset_name = generator.print_dataset(generator.simulate_dataset(
+    #     model, num_intervals, Covariates), num_intervals, base_directory, model, Covariates)
+    # metricNames = csv.reader(open(dataset_name, newline=''))
+    # metricNames = next(metricNames)[2:]
+    # data = pd.read_csv(dataset_name)
+    # kVec = data["FC"].values     # number of failures
+    # covariates = np.array(
+    #     [data[name].values for name in metricNames])
+    # numCovariates = len(covariates)
+    # num_hazard_params = len(parameters[model])
+    '''IF (iteration % numcovariates) = 2, then drop the covariates bewteen start and end'''
+  
+    covariates = input_dataset[1:]
+    kVec = input_dataset[0,:]
+    num_hazard_params = len(parameters[model])
+    Omega, mvf_array, converged, mle_array = runEstimation(
+        model, num_hazard_params, kVec, covariates)
+    Hazard_params = mle_array[0:num_hazard_params]
+    betas = mle_array[num_hazard_params:]
+    if converged:
+        return PSSE(covariates, Omega, Hazard_params, len(covariates), betas, kVec, model)
+    else:
+        return 2**8-1
+
+    # if converged:
+    #     print(
+    #         f"Data:{dataset_name} | Model:{model} | {numCovariates} Covariate(s)\n")
+    #     print(
+    #         f" [+] Omega: {Omega}\n [+] Hazard Parameters: {Hazard_params}\n [+] MLE Array: {betas}\n ")
+    #     convergence.PSSE(covariates, Omega, Hazard_params, numCovariates, betas, kVec)
+    # else:
+    #     print(f'-----[!] WARNING {dataset_name} | Model:{model} | {numCovariates} Covariates DID NOT CONVERGE!-----\n\n')

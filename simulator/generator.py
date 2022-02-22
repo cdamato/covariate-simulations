@@ -20,25 +20,12 @@ def poisson_variate(lam): # algorithm to find pseudorandom variate of the Poisso
 		s += p
 	return x
 
-def g(x, n, betas, interval): # Equation 15
-	g = 0
-	for i in range(0, n):
-		g += betas[i] * x[i][interval]
-	g = math.exp(g)
-	return g
-
-def p(model, params, interval, x, n, beta): # Equation 19
-	pixi = 1 - pow(1 - common.hazard_numerical(model, interval + 1, params), g(x, n, beta, interval))
-	for k in range(0, interval):
-		pixi *= pow(1 - common.hazard_numerical(model, k + 1, params), g(x, n, beta, k))
-	return pixi
-	
 def generate_FC(model_name, x, covNum, num_intervals, beta, omega, hazard_params):
 	n = len(beta)
 	failures = np.zeros(num_intervals)
 	cumulative = 0
 	for j in range(num_intervals):	
-		prob = p(model_name, hazard_params, j, x, n, beta)
+		prob = common.p(model_name, hazard_params, j, x, n, beta)
 		failures[j] = int(poisson_variate(omega * prob))
 		cumulative += prob
 	return failures
