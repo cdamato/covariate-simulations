@@ -237,7 +237,7 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
 
 def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec, model):
     full_length = len(kVec)
-    kVecNew = kVec[:full_length-2]
+    kVecNew = kVec[:full_length-5]
     mvf = 0
     accumulator = 0
     truncated_length = len(kVecNew)

@@ -12,21 +12,23 @@ class ANN(torch.nn.Module):
     def __init__(self, input_dim, output_dim):
         loss_fn = None
         optimizer = None
-
         super(ANN, self).__init__()
         self.fc1 = torch.nn.Linear(input_dim, input_dim*2)
-        self.fc2 = torch.nn.Linear(input_dim*2, input_dim*4)
-        self.fc3 = torch.nn.Linear(input_dim*4, input_dim*3)
-        self.fc4 = torch.nn.Linear(input_dim*3, input_dim)
-        self.output_layer = torch.nn.Linear(input_dim, output_dim)
+        self.fc2 = torch.nn.Linear(input_dim*2, input_dim*3)
+        self.fc3 = torch.nn.Linear(input_dim*3, input_dim*3)
+        self.fc4 = torch.nn.Linear(input_dim*3, input_dim*2)
+        self.output_layer = torch.nn.Linear(input_dim*2, output_dim)
         self.dropout = torch.nn.Dropout(0.15)
 
+    def swish(self, x):
+      return x * torch.sigmoid(x)
+
     def forward(self, x):
-        x = torch.relu(self.fc1(x))
+        x = self.swish(self.fc1(x))
         x = torch.sigmoid(self.fc2(x))
+        x = self.swish(self.fc3(x))
         x = self.dropout(x)
-        x = torch.relu(self.fc3(x))
-        x = torch.relu(self.fc4(x))
+        x = self.swish(self.fc4(x))
         x = self.output_layer(x)
         return x
         
@@ -95,9 +97,8 @@ def validation_epoch(nn, valid_loader, accumulators):
 
 
 def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weight_decay, output_directory):
-    epochs = 2
-      
-    nn = ANN(num_intervals*(num_covariates+1), num_hazards)
+    epochs = 500
+    nn = ANN(num_intervals*(num_covariates+1),num_hazards)
     nn.loss_fn = torch.nn.L1Loss()
     nn.optimizer = torch.optim.Adam(nn.parameters(), lr=learning_rate, weight_decay=weight_decay)
     if torch.cuda.is_available():
@@ -124,9 +125,9 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
         for i in range(epochs):
             valid_loader = nn_common.gen_training_detaset(i, num_hazards, num_covariates, num_intervals, True)
             valid_loss = validation_epoch(nn, valid_loader, accumulators)
-            print(f'----Epoch {e+1} Average Validation Loss: {valid_loss}\n')
+            print(f'----Epoch {i+1} Average Validation Loss: {valid_loss}\n')
             if min_valid_loss > valid_loss:
-                print(f'------Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model------\n')
+                print(f'------Validation Loss Decreased({min_valid_loss:.3f}--->{valid_loss:.3f}) \t Saving The Model------\n')
                 min_valid_loss = valid_loss
                 # Saving State Dict
                 torch.save(nn.state_dict(), 'saved_model.pth')
@@ -155,10 +156,10 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
     
     
     for model in common.models[:num_hazards]:
-        print(f"{model} accuracy: {len(accumulators[model])/total_chances}\n")
+        print(f"{model} accuracy: {len(accumulators[model])/epochs}\n")
         
 
 
 
 #(num_hazards , num_covariates , num_intervals , learning_rate , weight_decay , output_directory)
-train_model(3, 2, 25, 0.001, 1e-6,"sim1")
+train_model(5, 1, 50, 0.005, 1e-6,"sim1")
