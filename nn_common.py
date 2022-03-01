@@ -39,7 +39,8 @@ def gen_training_detaset(epoch, num_hazards, num_covariates, num_intervals, vali
         results[model_index, 0] = fitting.MaximumLiklihoodEstimator(model, dataset) # why not PSSE?
     #datasetPlotter(common.models[model_id], dataset[0], epoch, validation)
     # Why are we overwriting the dataset? and what is it being overwritten with? what
-    training_input = np.reshape(dataset, newshape=(1,(1+num_covariates)*num_intervals))
+    training_input = np.reshape(dataset, newshape=(1,(1+num_covariates)*num_intervals)) 
+    training_input = training_input / np.amax(training_input)
     training_output = np.reshape(results, newshape=(1,num_hazards))
     training_input = torch.from_numpy(training_input)
     training_output = torch.from_numpy(training_output)
@@ -62,11 +63,11 @@ Also is utilized to map output of NN to the corresponding hazard function.'''
 
 	
 def datasetPlotter(model, FC, epoch, validation):
-  #  plt.title(model)
-  #  plt.plot(FC, color="red")
-  #  if validation == True:
-  #   plt.savefig(f"DatasetPlots/VAL-{model}Epoch{epoch}.png")
-  #  else:
-  #   plt.savefig(f"DatasetPlots/{model}Epoch{epoch}.png")
-  #  plt.close()
-  return
+    plt.title(model)
+    plt.plot(FC, color="red")
+    if validation == True:
+        plt.savefig(f"DatasetPlots/VAL-{model}Epoch{epoch}.png")
+    else:
+        plt.savefig(f"DatasetPlots/{model}Epoch{epoch}.png")
+        plt.close()
+    return
