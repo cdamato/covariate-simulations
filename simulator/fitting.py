@@ -237,27 +237,32 @@ def runEstimation(model, num_hazard_params, kVec, covariateData):
 
 def PSSE(covariates, omega, hazard_params, num_covariates, betas, kVec, model):
     full_length = len(kVec)
-    kVecNew = kVec[:full_length-5]
+    kVecNew = kVec[:full_length-3]
     mvf = 0
     accumulator = 0
     truncated_length = len(kVecNew)
     truncated_sum = sum(kVecNew)
+    # print(omega)
+    # print(kVec)
+    # truncated_covariates = np.delete(covariates, [45,46,47,48,49], axis=1)
+    # print(kVec)
     PSSE = 0
     for i in range(truncated_length, full_length):
         mvf = float(omega*common.p(model, hazard_params,
                     i, covariates, num_covariates, betas))
         accumulator += mvf
-        PSSE += (mvf-kVec[i-1])**2
-#        print(f"[+] Predicted FC at interval {i+1} is: {mvf}")
-#        print(f"[+] Actual FC at interval {i+1} is: {kVec[i-1]}\n")
-#    print(
-#        f"\n-----------Predictive cumulative FC is {truncated_sum+accumulator}---------------")
-#    print(
-#        f"-------------Actual cumulative FC is {sum(kVec)}------------------------------")
-#    print(
-#        f"-------------PSSE: {PSSE}-------------------------------------------------\n")
-    if PSSE > 255:
-        return 255
+
+        PSSE += (mvf-kVec[i])**2
+    #     print(f"[+] Predicted FC at interval {i} is: {mvf}")
+    #     print(f"[+] Actual FC at interval {i} is: {kVec[i]}\n")
+    # print(
+    #    f"\n-----------Predictive cumulative FC is {truncated_sum+accumulator}---------------")
+    # print(
+    #     f"-------------Actual cumulative FC is {sum(kVec)}------------------------------")
+    # print(
+    #     f"-------------PSSE: {PSSE}-------------------------------------------------\n")
+    if PSSE > 127:
+        return 127
     else:
         return PSSE
 
@@ -292,7 +297,7 @@ def MaximumLiklihoodEstimator(model, input_dataset):
     if converged:
         return PSSE(covariates, Omega, Hazard_params, len(covariates), betas, kVec, model)
     else:
-        return 2**8-1
+        return 127
 
     # if converged:
     #     print(

@@ -1,6 +1,8 @@
 import math
 
-models = ["GM", "NB2", "DW2", "DW3", "S", "IFRSB", "IFRGSB"]
+models = ["GM", "NB2", "DW2", "S"]
+#models = ["GM", "DW2"]
+#models = ["NB2", "DW2", "DW3", "S", "IFRSB", "IFRGSB"]
 
 def hazard_numerical(model, i, args):
     if model == "GM":

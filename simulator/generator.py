@@ -21,14 +21,16 @@ def poisson_variate(lam): # algorithm to find pseudorandom variate of the Poisso
 	return x
 
 def generate_FC(model_name, x, covNum, num_intervals, beta, omega, hazard_params):
-	n = len(beta)
-	failures = np.zeros(num_intervals)
-	cumulative = 0
-	for j in range(num_intervals):	
-		prob = common.p(model_name, hazard_params, j, x, n, beta)
-		failures[j] = int(poisson_variate(omega * prob))
-		cumulative += prob
-	return failures
+	 n = len(beta)
+	 failures = np.zeros(num_intervals)
+	 cumulative = 0
+	# failures = np.random.poisson(lam=5, size = num_intervals)
+	# return failures
+	 for j in range(num_intervals):	
+	 	prob = common.p(model_name, hazard_params, j, x, n, beta)
+	 	failures[j] = int(poisson_variate(omega * prob))
+	 	cumulative += prob
+	 return failures
 
 # Most models have an actual parameter range between 0 and 1.
 # However, they act strange near the edge cases, so clamping the values produces more identifiable results.
@@ -50,13 +52,13 @@ def generate_hazardparams(hazard_name):
 def generate_betas(num_covariates):
 	betas = []
 	for covariate in range(num_covariates):
-		betas.append(random.uniform(0.01, 0.05))
-	return betas;
+		betas.append(random.uniform(0.001, 0.005))
+	return betas
 
 # I believe omega is independent of model, so I removed the dictionary.
 # If this is false, it can be re-acquired from git.
 def generate_omega(hazard_name):
-	return random.uniform(25, 125)
+	return 5000
 
 # Input will be a matrix of size <num_covariates> by <num_intervals>, containing a generated dataset.
 def simulate_dataset(hazard, num_intervals, num_covariates):
