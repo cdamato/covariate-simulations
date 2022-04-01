@@ -1,2 +1,7 @@
 __pycache__
 .DS_Store
+.idea
+*.png
+4haz1cov300epochLR00005.png
+4haz1cov300epochLR0.0005.csv
+.gitignore

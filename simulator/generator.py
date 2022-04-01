@@ -9,6 +9,8 @@ import numpy as np
 from simulator import common
 
 def poisson_variate(lam): # algorithm to find pseudorandom variate of the Poisson distribution
+	#temp fix for testing
+	#lam /= 10
 	x = 0
 	p = math.exp(-lam)
 	s = p

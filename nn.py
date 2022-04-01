@@ -35,6 +35,7 @@ class ANN(torch.nn.Module):
         x = self.dropout(x) 
         #x = self.swish(self.fc4(x))
         x = self.output_layer(x)
+        x = torch.nn.Softmax()(x)
         return x
 
     def run_epoch(self, data, target):
@@ -53,16 +54,18 @@ def epoch(nn, train_loader, location,  validation):
     train_loss = 0.0
     cov_count = 0
     column = 0
+    total_loss = 0
     #want to run through multiple different graphs every single epoch
     for data, target in train_loader:
         # Clear the gradients
         numerical_results = nn_common.sortHazard(target)
         nn.optimizer.zero_grad()
         model_results, loss = nn.run_epoch(data, target)
+        total_loss += loss
 
         if validation:
             # uses dictionary to sort the models output/ for validation. Same process can be done for training but that is not really interesting.
-            calculated_best_hazard = numerical_results[0][0] 
+            calculated_best_hazard = numerical_results[0][0]
             predicted_best_hazard = model_results[0][0]
             for nn_model_index, model in enumerate(common.models):
                 if model == predicted_best_hazard:
@@ -72,23 +75,24 @@ def epoch(nn, train_loader, location,  validation):
             for i, hazard in enumerate(model_results):
                 if hazard[0] == numerical_results[0][0]: # tuples
                   location[i] += 1
-        else:
-            # Calculate gradients
-            loss.backward()
-            # Update Weights
-            nn.optimizer.step()
         # Calculate Loss
         train_loss += loss.item()
         print(f"[+] covariate vector: {bin(cov_count)} [+]")
         print(f"[+] Sorted output for results: {numerical_results} [+]")
         print(f"[+] Sorted output for model prediction {model_results} [+] \n")
         cov_count += 1
+
+    if not validation:
+        # Calculate gradients
+        loss.backward()
+        # Update Weights
+        nn.optimizer.step()
     return column, train_loss  
           
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
 
-def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weight_decay, output_directory):
+def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weight_decay, output_directory, batch_size):
     epochs = 100
     nn = ANN(num_intervals*(num_covariates+1),num_hazards)
     nn.loss_fn = torch.nn.CrossEntropyLoss()
@@ -98,7 +102,7 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
   
     loss_array = [0] * int(epochs)
     for e in range(epochs):
-        model_id, train_loader = nn_common.gen_training_detaset(e, num_hazards, num_covariates, num_intervals, False, 1)
+        models, train_loader = nn_common.gen_training_detaset(e, num_hazards, num_covariates, num_intervals, False, batch_size)
         column, train_loss = epoch(nn, train_loader, "", False)
         loss_array.append(train_loss)
         print(f'- ---Epoch {e+1} \t\t Average Training Loss: {train_loss}\n')
@@ -112,9 +116,9 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
     with torch.no_grad():
         nn.eval()
         for i in range(epochs):
-            model_id, valid_loader = nn_common.gen_training_detaset(i, num_hazards, num_covariates, num_intervals, True, 1)
+            models, valid_loader = nn_common.gen_training_detaset(i, num_hazards, num_covariates, num_intervals, True, 1)
             column, valid_loss = epoch(nn, valid_loader, location, True)
-            solution_matrix[model_id, column] += 1
+            solution_matrix[models.astype(int)[0], column] += 1
             val_array.append(valid_loss)
             print(f'----Epoch {i+1} Average Validation Loss: {valid_loss}\n')
             if min_valid_loss > valid_loss:
@@ -179,4 +183,4 @@ def train_model(num_hazards, num_covariates, num_intervals, learning_rate, weigh
 
 
 #(num_hazards , num_covariates , num_intervals , learning_rate , weight_decay , output_directory)
-train_model(len(common.models), 1, 25, 0.0005, 1e-6,"sim1")
+train_model(len(common.models), 1, 25, 0.0005, 1e-6,"sim1", 3)
